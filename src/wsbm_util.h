@@ -1,5 +1,5 @@
 /*
- * This file is not copyrighted for obvious reasons.
+ * This file is not copyrighted.
  */
 
 #ifndef _WSBM_UTIL_H_

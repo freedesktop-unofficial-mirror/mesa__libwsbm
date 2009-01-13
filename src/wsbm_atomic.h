@@ -1,3 +1,8 @@
+/**
+ * This file is under no copyright claims due to its
+ * simplicity.
+ */
+
 #ifndef _WSBM_ATOMIC_H_
 #define _WSBM_ATOMIC_H_
 
