@@ -79,13 +79,12 @@ struct _WsbmBufferObject
     struct _WsbmBufferPool *pool;
 };
 
-
 struct _WsbmBufferList
 {
     int hasKernelBuffers;
 
-    struct _ValidateList kernelBuffers;   /* List of kernel buffers needing validation */
-    struct _ValidateList userBuffers;   /* List of user-space buffers needing validation */
+    struct _ValidateList kernelBuffers;	/* List of kernel buffers needing validation */
+    struct _ValidateList userBuffers;  /* List of user-space buffers needing validation */
 };
 
 static struct _WsbmMutex bmMutex;
@@ -112,22 +111,25 @@ wsbmInit(struct _WsbmThreadFuncs *tf, struct _WsbmVNodeFuncs *vf)
 	WSBM_MUTEX_FREE(&bmMutex);
 	return -ENOMEM;
     }
-    
+
     initialized = 1;
     return 0;
 }
 
-void wsbmCommonDataSet(void *d)
+void
+wsbmCommonDataSet(void *d)
 {
     commonData = d;
 }
 
-void *wsbmCommonDataGet(void)
+void *
+wsbmCommonDataGet(void)
 {
     return commonData;
 }
 
-int wsbmIsInitialized(void)
+int
+wsbmIsInitialized(void)
 {
     return initialized;
 }
@@ -394,6 +396,7 @@ uint32_t
 wsbmBOPlacementHint(struct _WsbmBufferObject * buf)
 {
     struct _WsbmBufStorage *storage = buf->storage;
+
     assert(buf->storage != NULL);
 
     return storage->pool->placement(storage);
@@ -412,7 +415,7 @@ wsbmBOReference(struct _WsbmBufferObject *buf)
 
 int
 wsbmBOSetStatus(struct _WsbmBufferObject *buf,
-	       uint32_t setFlags, uint32_t clrFlags)
+		uint32_t setFlags, uint32_t clrFlags)
 {
     struct _WsbmBufStorage *storage = buf->storage;
 
@@ -429,13 +432,14 @@ void
 wsbmBOUnreference(struct _WsbmBufferObject **p_buf)
 {
     struct _WsbmBufferObject *buf = *p_buf;
+
     *p_buf = NULL;
 
     if (!buf)
 	return;
 
     if (buf->bufferType == WSBM_BUFFER_SIMPLE) {
-        struct _WsbmBufStorage *dummy = buf->storage;
+	struct _WsbmBufStorage *dummy = buf->storage;
 
 	wsbmBufStorageUnref(&dummy);
 	return;
@@ -449,8 +453,8 @@ wsbmBOUnreference(struct _WsbmBufferObject **p_buf)
 
 int
 wsbmBOData(struct _WsbmBufferObject *buf,
-	  unsigned size, const void *data,
-	  struct _WsbmBufferPool * newPool, uint32_t placement)
+	   unsigned size, const void *data,
+	   struct _WsbmBufferPool *newPool, uint32_t placement)
 {
     void *virtual = NULL;
     int newBuffer;
@@ -467,19 +471,20 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 
     if (newPool == NULL)
 	newPool = buf->pool;
-    
+
     if (newPool == NULL)
 	return -EINVAL;
 
     newBuffer = (!storage || storage->pool != newPool ||
 		 storage->pool->size(storage) < size ||
-		 storage->pool->size(storage) > size + WSBM_BODATA_SIZE_ACCEPT);
+		 storage->pool->size(storage) >
+		 size + WSBM_BODATA_SIZE_ACCEPT);
 
     if (!placement)
 	placement = buf->placement;
 
     if (newBuffer) {
-	if (buf->bufferType == WSBM_BUFFER_REF) 
+	if (buf->bufferType == WSBM_BUFFER_REF)
 	    return -EINVAL;
 
 	wsbmBufStorageUnref(&buf->storage);
@@ -491,7 +496,8 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 	    goto out;
 	}
 
-	buf->storage = newPool->create(newPool, size, placement, buf->alignment);
+	buf->storage =
+	    newPool->create(newPool, size, placement, buf->alignment);
 	if (!buf->storage) {
 	    retval = -ENOMEM;
 	    goto out;
@@ -507,9 +513,11 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 	 */
 
 	struct _WsbmBufStorage *tmp_storage;
+
 	curPool = storage->pool;
 
-	tmp_storage = curPool->create(curPool, size, placement, buf->alignment);
+	tmp_storage =
+	    curPool->create(curPool, size, placement, buf->alignment);
 
 	if (tmp_storage) {
 	    wsbmBufStorageUnref(&buf->storage);
@@ -521,7 +529,7 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 		goto out;
 	    synced = 1;
 	}
-    } else 
+    } else
 	synced = 1;
 
     placement_diff = placement ^ buf->placement;
@@ -529,7 +537,7 @@ wsbmBOData(struct _WsbmBufferObject *buf,
     /*
      * We might need to change buffer placement.
      */
-    
+
     storage = buf->storage;
     curPool = storage->pool;
 
@@ -537,22 +545,22 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 	assert(curPool->setStatus != NULL);
 	curPool->releasefromcpu(storage, WSBM_SYNCCPU_WRITE);
 	retval = curPool->setStatus(storage,
-				 placement_diff & placement,
-				 placement_diff & ~placement);
+				    placement_diff & placement,
+				    placement_diff & ~placement);
 	if (retval)
 	    goto out;
-	    
+
 	buf->placement = placement;
 
     }
 
     if (!synced) {
 	retval = curPool->syncforcpu(buf->storage, WSBM_SYNCCPU_WRITE);
-	
+
 	if (retval)
 	    goto out;
 	synced = 1;
-    }    
+    }
 
     storage = buf->storage;
     curPool = storage->pool;
@@ -564,7 +572,7 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 	memcpy(virtual, data, size);
 	curPool->unmap(storage);
     }
-	    
+
   out:
 
     if (synced)
@@ -576,17 +584,17 @@ wsbmBOData(struct _WsbmBufferObject *buf,
 static struct _WsbmBufStorage *
 wsbmStorageClone(struct _WsbmBufferObject *buf)
 {
-	struct _WsbmBufStorage *storage = buf->storage;
-	struct _WsbmBufferPool *pool = storage->pool;
-	
-	return pool->create(pool, pool->size(storage), buf->placement,
-			    buf->alignment);
+    struct _WsbmBufStorage *storage = buf->storage;
+    struct _WsbmBufferPool *pool = storage->pool;
+
+    return pool->create(pool, pool->size(storage), buf->placement,
+			buf->alignment);
 }
 
 struct _WsbmBufferObject *
-wsbmBOClone(struct _WsbmBufferObject *buf, 
-	    int (*accelCopy) (struct _WsbmBufferObject *, 
-			       struct _WsbmBufferObject *))
+wsbmBOClone(struct _WsbmBufferObject *buf,
+	    int (*accelCopy) (struct _WsbmBufferObject *,
+			      struct _WsbmBufferObject *))
 {
     struct _WsbmBufferObject *newBuf;
     int ret;
@@ -594,7 +602,7 @@ wsbmBOClone(struct _WsbmBufferObject *buf,
     newBuf = malloc(sizeof(*newBuf));
     if (!newBuf)
 	return NULL;
-    
+
     *newBuf = *buf;
     newBuf->storage = wsbmStorageClone(buf);
     if (!newBuf->storage)
@@ -623,7 +631,7 @@ wsbmBOClone(struct _WsbmBufferObject *buf,
 	pool->unmap(newBuf->storage);
 	pool->unmap(buf->storage);
 	pool->releasefromcpu(storage, WSBM_SYNCCPU_READ);
-    }    
+    }
 
     return newBuf;
   out_err3:
@@ -637,11 +645,10 @@ wsbmBOClone(struct _WsbmBufferObject *buf,
     return 0;
 }
 
-
 int
 wsbmBOSubData(struct _WsbmBufferObject *buf,
 	      unsigned long offset, unsigned long size, const void *data,
-	      int (*accelCopy) (struct _WsbmBufferObject *, 
+	      int (*accelCopy) (struct _WsbmBufferObject *,
 				struct _WsbmBufferObject *))
 {
     int ret = 0;
@@ -686,11 +693,11 @@ wsbmBOSubData(struct _WsbmBufferObject *buf,
 		wsbmBOUnreference(&newBuf);
 		pool = storage->pool;
 	    }
-		
+
 	    ret = pool->syncforcpu(storage, WSBM_SYNCCPU_WRITE);
 	    if (ret)
 		goto out;
-	}	    
+	}
 
 	ret = pool->map(storage, WSBM_ACCESS_WRITE, &virtual);
 	if (ret) {
@@ -699,7 +706,7 @@ wsbmBOSubData(struct _WsbmBufferObject *buf,
 	}
 
 	memcpy((unsigned char *)virtual + offset, data, size);
-        pool->unmap(storage);
+	pool->unmap(storage);
 	pool->releasefromcpu(storage, WSBM_SYNCCPU_WRITE);
     }
   out:
@@ -708,7 +715,7 @@ wsbmBOSubData(struct _WsbmBufferObject *buf,
 
 int
 wsbmBOGetSubData(struct _WsbmBufferObject *buf,
-		unsigned long offset, unsigned long size, void *data)
+		 unsigned long offset, unsigned long size, void *data)
 {
     int ret = 0;
 
@@ -753,23 +760,22 @@ wsbmBOSetReferenced(struct _WsbmBufferObject *buf, unsigned long handle)
     return ret;
 }
 
-void wsbmBOFreeSimple(void *ptr)
-{    
+void
+wsbmBOFreeSimple(void *ptr)
+{
     free(ptr);
-}    
+}
 
 struct _WsbmBufferObject *
 wsbmBOCreateSimple(struct _WsbmBufferPool *pool,
 		   unsigned long size,
 		   uint32_t placement,
-		   unsigned alignment, 
-		   size_t extra_size,
-		   size_t *offset)
+		   unsigned alignment, size_t extra_size, size_t * offset)
 {
     struct _WsbmBufferObject *buf;
     struct _WsbmBufStorage *storage;
-    
-    *offset = (sizeof(*buf) + 15) & ~15; 
+
+    *offset = (sizeof(*buf) + 15) & ~15;
 
     if (extra_size) {
 	extra_size += *offset - sizeof(*buf);
@@ -798,19 +804,17 @@ wsbmBOCreateSimple(struct _WsbmBufferPool *pool,
     free(buf);
     return NULL;
 }
-    
-
 
 int
 wsbmGenBuffers(struct _WsbmBufferPool *pool,
-	      unsigned n,
-	      struct _WsbmBufferObject *buffers[],
-	      unsigned alignment, uint32_t placement)
+	       unsigned n,
+	       struct _WsbmBufferObject *buffers[],
+	       unsigned alignment, uint32_t placement)
 {
     struct _WsbmBufferObject *buf;
     int i;
 
-    placement = (placement) ? placement : 
+    placement = (placement) ? placement :
 	WSBM_PL_FLAG_SYSTEM | WSBM_PL_FLAG_CACHED;
 
     for (i = 0; i < n; ++i) {
@@ -889,8 +893,8 @@ wsbmBOFreeList(struct _WsbmBufferList *list)
 
 static int
 wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
-		   uint64_t mask, int *itemLoc,
-		   struct _ValidateNode **pnode, int *newItem)
+		    uint64_t mask, int *itemLoc,
+		    struct _ValidateNode **pnode, int *newItem)
 {
     struct _ValidateNode *node, *cur;
     struct _WsbmListHead *l;
@@ -942,12 +946,12 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
     }
     *itemLoc = cur->listItem;
     if (pnode)
-      *pnode = cur;
+	*pnode = cur;
     return 0;
 }
 
 int
-wsbmBOAddListItem(struct _WsbmBufferList *list, 
+wsbmBOAddListItem(struct _WsbmBufferList *list,
 		  struct _WsbmBufferObject *buf,
 		  uint64_t flags, uint64_t mask, int *itemLoc,
 		  struct _ValidateNode **node)
@@ -970,7 +974,7 @@ wsbmBOAddListItem(struct _WsbmBufferList *list,
     }
 
     ret = wsbmAddValidateItem(&list->userBuffers, storage,
-			     flags, mask, &dummy, &dummyNode, &newItem);
+			      flags, mask, &dummy, &dummyNode, &newItem);
     if (ret)
 	goto out_unlock;
 
@@ -979,7 +983,7 @@ wsbmBOAddListItem(struct _WsbmBufferList *list,
 	wsbmAtomicInc(&storage->onList);
     }
 
- out_unlock:
+  out_unlock:
     return ret;
 }
 
@@ -994,14 +998,13 @@ wsbmBOFence(struct _WsbmBufferObject *buf, struct _WsbmFenceObject *fence)
 
 }
 
-int 
+int
 wsbmBOOnList(const struct _WsbmBufferObject *buf)
 {
     if (buf->storage == NULL)
 	return 0;
     return wsbmAtomicRead(&buf->storage->onList);
 }
-
 
 int
 wsbmBOUnrefUserList(struct _WsbmBufferList *list)
@@ -1073,7 +1076,6 @@ wsbmBOValidateUserList(struct _WsbmBufferList *list)
     }
     return 0;
 }
-
 
 int
 wsbmBOUnvalidateUserList(struct _WsbmBufferList *list)
@@ -1172,8 +1174,8 @@ wsbmKBufHandle(const struct _WsbmKernelBuf * kBuf)
 
 extern void
 wsbmUpdateKBuf(struct _WsbmKernelBuf *kBuf,
-		uint64_t gpuOffset, uint32_t placement, 
-		uint32_t fence_type_mask)
+	       uint64_t gpuOffset, uint32_t placement,
+	       uint32_t fence_type_mask)
 {
     kBuf->gpuOffset = gpuOffset;
     kBuf->placement = placement;

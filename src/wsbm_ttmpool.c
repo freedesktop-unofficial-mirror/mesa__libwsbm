@@ -217,16 +217,16 @@ pool_destroy(struct _WsbmBufStorage **buf)
 	dBuf->virtual = NULL;
     }
     arg.handle = dBuf->kBuf.handle;
-    (void) drmCommandWrite(dBuf->buf.pool->fd, 
-			   ttmPool->devOffset + TTM_PL_UNREF,
-			   &arg, sizeof(arg));
+    (void)drmCommandWrite(dBuf->buf.pool->fd,
+			  ttmPool->devOffset + TTM_PL_UNREF,
+			  &arg, sizeof(arg));
 
     WSBM_COND_FREE(&dBuf->event);
     wsbmBufStorageTakedown(&dBuf->buf);
     free(dBuf);
 }
 
-static int 
+static int
 syncforcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 {
     uint32_t kmode = 0;
@@ -247,7 +247,7 @@ syncforcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 
     if ((mode & WSBM_SYNCCPU_WRITE) && (++dBuf->writers == 1))
 	kmode |= TTM_PL_SYNCCPU_MODE_WRITE;
-    
+
     if (kmode) {
 	struct ttm_pl_synccpu_arg arg;
 
@@ -255,7 +255,6 @@ syncforcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 	    kmode |= TTM_PL_SYNCCPU_MODE_NO_BLOCK;
 
 	dBuf->syncInProgress = 1;
-
 
 	/*
 	 * This might be a lengthy wait, so
@@ -284,7 +283,7 @@ syncforcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
     return ret;
 }
 
-static int 
+static int
 releasefromcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 {
     uint32_t kmode = 0;
@@ -300,7 +299,7 @@ releasefromcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 
     if ((mode & WSBM_SYNCCPU_WRITE) && (--dBuf->writers == 0))
 	kmode |= TTM_PL_SYNCCPU_MODE_WRITE;
-    
+
     if (kmode) {
 	struct ttm_pl_synccpu_arg arg;
 
@@ -311,7 +310,7 @@ releasefromcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 	DRMRESTARTCOMMANDWRITE(dBuf->buf.pool->fd,
 			       ttmPool->devOffset + TTM_PL_SYNCCPU, arg, ret);
 
-    }	
+    }
 
     return ret;
 }
@@ -320,21 +319,20 @@ static int
 pool_syncforcpu(struct _WsbmBufStorage *buf, unsigned mode)
 {
     int ret;
-    
+
     WSBM_MUTEX_LOCK(&buf->mutex);
     ret = syncforcpu_locked(buf, mode);
     WSBM_MUTEX_UNLOCK(&buf->mutex);
     return ret;
 }
-    
+
 static void
-pool_releasefromcpu(struct _WsbmBufStorage *buf, unsigned mode) 
+pool_releasefromcpu(struct _WsbmBufStorage *buf, unsigned mode)
 {
     WSBM_MUTEX_LOCK(&buf->mutex);
-    (void) releasefromcpu_locked(buf, mode);
+    (void)releasefromcpu_locked(buf, mode);
     WSBM_MUTEX_UNLOCK(&buf->mutex);
 }
-
 
 static int
 pool_map(struct _WsbmBufStorage *buf, unsigned mode, void **virtual)
@@ -342,7 +340,6 @@ pool_map(struct _WsbmBufStorage *buf, unsigned mode, void **virtual)
     struct _TTMBuffer *dBuf = ttmBuffer(buf);
     void *virt;
     int ret = 0;
-
 
     WSBM_MUTEX_LOCK(&buf->mutex);
 
@@ -366,7 +363,7 @@ pool_map(struct _WsbmBufStorage *buf, unsigned mode, void **virtual)
   out_unlock:
 
     WSBM_MUTEX_UNLOCK(&buf->mutex);
- 
+
     return ret;
 }
 

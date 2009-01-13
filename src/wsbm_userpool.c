@@ -102,7 +102,7 @@ struct _WsbmUserPool
     struct _WsbmListHead agpLRU;
     struct _WsbmMM vramMM;
     struct _WsbmMM agpMM;
-    uint32_t (*fenceTypes) (uint64_t);
+        uint32_t(*fenceTypes) (uint64_t);
 };
 
 static inline struct _WsbmUserPool *
@@ -279,9 +279,9 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 
     WSBM_MUTEX_LOCK(&buf->mutex);
 
-    while(wsbmAtomicRead(&vBuf->writers) != 0)
+    while (wsbmAtomicRead(&vBuf->writers) != 0)
 	WSBM_COND_WAIT(&vBuf->event, &buf->mutex);
-    
+
     vBuf->unFenced = 1;
 
     WSBM_MUTEX_LOCK(&p->mutex);
@@ -467,7 +467,7 @@ pool_releaseFromCpu(struct _WsbmBufStorage *buf, unsigned mode)
 {
     struct _WsbmUserBuffer *vBuf = userBuf(buf);
 
-    if (wsbmAtomicDecZero(&vBuf->writers)) 
+    if (wsbmAtomicDecZero(&vBuf->writers))
 	WSBM_COND_BROADCAST(&vBuf->event);
 
 }
@@ -487,7 +487,7 @@ pool_syncForCpu(struct _WsbmBufStorage *buf, unsigned mode)
 	}
 
 	ret = 0;
-	if ((vBuf->fence == NULL) || 
+	if ((vBuf->fence == NULL) ||
 	    wsbmFenceSignaled(vBuf->fence, vBuf->kBuf.fence_type_mask)) {
 	    wsbmFenceUnreference(&vBuf->fence);
 	    wsbmAtomicInc(&vBuf->writers);
@@ -502,7 +502,6 @@ pool_syncForCpu(struct _WsbmBufStorage *buf, unsigned mode)
     WSBM_MUTEX_UNLOCK(&buf->mutex);
     return ret;
 }
-
 
 static unsigned long
 pool_offset(struct _WsbmBufStorage *buf)
@@ -536,7 +535,7 @@ pool_fence(struct _WsbmBufStorage *buf, struct _WsbmFenceObject *fence)
     vBuf->fence = wsbmFenceReference(fence);
     vBuf->unFenced = 0;
     vBuf->kBuf.fence_type_mask = vBuf->newFenceType;
-    
+
     WSBM_COND_BROADCAST(&vBuf->event);
     WSBM_MUTEX_LOCK(&p->mutex);
     if (vBuf->kBuf.placement & WSBM_PL_FLAG_VRAM)
@@ -609,12 +608,10 @@ pool_takedown(struct _WsbmBufferPool *pool)
     free(p);
 }
 
-void 
-wsbmUserPoolClean(struct _WsbmBufferPool *pool,
-		  int cleanVram,
-		  int cleanAgp)
+void
+wsbmUserPoolClean(struct _WsbmBufferPool *pool, int cleanVram, int cleanAgp)
 {
-   struct _WsbmUserPool *p = containerOf(pool, struct _WsbmUserPool, pool);
+    struct _WsbmUserPool *p = containerOf(pool, struct _WsbmUserPool, pool);
 
     WSBM_MUTEX_LOCK(&p->mutex);
     if (cleanVram)
@@ -627,9 +624,9 @@ wsbmUserPoolClean(struct _WsbmBufferPool *pool,
 struct _WsbmBufferPool *
 wsbmUserPoolInit(void *vramAddr,
 		 unsigned long vramStart, unsigned long vramSize,
-		 void *agpAddr, unsigned long agpStart, 
+		 void *agpAddr, unsigned long agpStart,
 		 unsigned long agpSize,
-		 uint32_t (*fenceTypes) (uint64_t set_flags))
+		 uint32_t(*fenceTypes) (uint64_t set_flags))
 {
     struct _WsbmBufferPool *pool;
     struct _WsbmUserPool *uPool;
@@ -659,7 +656,7 @@ wsbmUserPoolInit(void *vramAddr,
     uPool->agpMap = (unsigned long)agpAddr;
     uPool->vramOffset = vramStart;
     uPool->vramMap = (unsigned long)vramAddr;
-    uPool->fenceTypes = fenceTypes; 
+    uPool->fenceTypes = fenceTypes;
 
     pool = &uPool->pool;
     pool->map = &pool_map;

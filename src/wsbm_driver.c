@@ -103,25 +103,26 @@ wsbmNullThreadFuncs(void)
  * pthreads implementation:
  */
 
-
-struct _WsbmPMutex {
+struct _WsbmPMutex
+{
     struct _WsbmThreadFuncs *func;
     pthread_mutex_t mutex;
 };
 
-struct _WsbmPCond {
+struct _WsbmPCond
+{
     struct _WsbmThreadFuncs *func;
     pthread_cond_t cond;
 };
 
-
 static inline struct _WsbmPMutex *
 pMutexConvert(struct _WsbmMutex *m)
 {
-    union _PMutexConverter {
+    union _PMutexConverter
+    {
 	struct _WsbmMutex wm;
 	struct _WsbmPMutex pm;
-    } *um = containerOf(m, union _PMutexConverter, wm);
+    }  *um = containerOf(m, union _PMutexConverter, wm);
 
     return &um->pm;
 }
@@ -129,14 +130,14 @@ pMutexConvert(struct _WsbmMutex *m)
 static inline struct _WsbmPCond *
 pCondConvert(struct _WsbmCond *c)
 {
-    union _PCondConverter {
+    union _PCondConverter
+    {
 	struct _WsbmCond wc;
 	struct _WsbmPCond pc;
-    } *uc = containerOf(c, union _PCondConverter, wc);
+    }  *uc = containerOf(c, union _PCondConverter, wc);
 
     return &uc->pc;
 }
-
 
 static int
 p_mutexInit(struct _WsbmMutex *mutex, struct _WsbmThreadFuncs *func)
@@ -146,7 +147,7 @@ p_mutexInit(struct _WsbmMutex *mutex, struct _WsbmThreadFuncs *func)
     if (sizeof(struct _WsbmMutex) < sizeof(struct _WsbmPMutex))
 	return -EINVAL;
 
-    pMutex->func = func;    
+    pMutex->func = func;
     pthread_mutex_init(&pMutex->mutex, NULL);
     return 0;
 }
@@ -155,6 +156,7 @@ static void
 p_mutexFree(struct _WsbmMutex *mutex)
 {
     struct _WsbmPMutex *pMutex = pMutexConvert(mutex);
+
     pthread_mutex_destroy(&pMutex->mutex);
 }
 

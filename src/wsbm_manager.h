@@ -52,7 +52,7 @@ struct _WsbmBufferList;
  * replicate them here, and if there is a discrepancy,
  * that needs to be resolved in the buffer pool using
  * the TTM flags.
- */ 
+ */
 
 #define WSBM_PL_MASK_MEM         0x0000FFFF
 
@@ -77,8 +77,7 @@ struct _WsbmBufferList;
 
 extern void *wsbmBOMap(struct _WsbmBufferObject *buf, unsigned mode);
 extern void wsbmBOUnmap(struct _WsbmBufferObject *buf);
-extern int wsbmBOSyncForCpu(struct _WsbmBufferObject *buf,
-			    unsigned mode);
+extern int wsbmBOSyncForCpu(struct _WsbmBufferObject *buf, unsigned mode);
 extern void wsbmBOReleaseFromCpu(struct _WsbmBufferObject *buf,
 				 unsigned mode);
 
@@ -86,49 +85,52 @@ extern unsigned long wsbmBOOffsetHint(struct _WsbmBufferObject *buf);
 extern unsigned long wsbmBOPoolOffset(struct _WsbmBufferObject *buf);
 
 extern uint32_t wsbmBOPlacementHint(struct _WsbmBufferObject *buf);
-extern struct _WsbmBufferObject *wsbmBOReference(struct _WsbmBufferObject *buf);
+extern struct _WsbmBufferObject *wsbmBOReference(struct _WsbmBufferObject
+						 *buf);
 extern void wsbmBOUnreference(struct _WsbmBufferObject **p_buf);
 
 extern int wsbmBOData(struct _WsbmBufferObject *r_buf,
-		     unsigned size, const void *data,
-		     struct _WsbmBufferPool *pool, uint32_t placement);
+		      unsigned size, const void *data,
+		      struct _WsbmBufferPool *pool, uint32_t placement);
 extern int wsbmBOSetStatus(struct _WsbmBufferObject *buf,
-			   uint32_t setPlacement, 
-			   uint32_t clrPlacement);
+			   uint32_t setPlacement, uint32_t clrPlacement);
 extern int wsbmBOSubData(struct _WsbmBufferObject *buf,
 			 unsigned long offset, unsigned long size,
-			 const void *data, 
-			 int (*accelCopy) (struct _WsbmBufferObject *, 
+			 const void *data,
+			 int (*accelCopy) (struct _WsbmBufferObject *,
 					   struct _WsbmBufferObject *));
-extern struct _WsbmBufferObject *
-wsbmBOClone(struct _WsbmBufferObject *buf, 
-	    int (*accelCopy) (struct _WsbmBufferObject *, 
-			      struct _WsbmBufferObject *));
+extern struct _WsbmBufferObject *wsbmBOClone(struct _WsbmBufferObject *buf,
+					     int (*accelCopy) (struct
+							       _WsbmBufferObject
+							       *,
+							       struct
+							       _WsbmBufferObject
+							       *));
 
 extern int wsbmBOGetSubData(struct _WsbmBufferObject *buf,
-			   unsigned long offset, unsigned long size,
-			   void *data);
+			    unsigned long offset, unsigned long size,
+			    void *data);
 extern int wsbmGenBuffers(struct _WsbmBufferPool *pool,
-			 unsigned n,
-			 struct _WsbmBufferObject *buffers[],
-			 unsigned alignment, uint32_t placement);
+			  unsigned n,
+			  struct _WsbmBufferObject *buffers[],
+			  unsigned alignment, uint32_t placement);
 
-struct _WsbmBufferObject *
-wsbmBOCreateSimple(struct _WsbmBufferPool *pool,
-		   unsigned long size,
-		   uint32_t placement,
-		   unsigned alignment, 
-		   size_t extra_size,
-		   size_t *offset);
+struct _WsbmBufferObject *wsbmBOCreateSimple(struct _WsbmBufferPool *pool,
+					     unsigned long size,
+					     uint32_t placement,
+					     unsigned alignment,
+					     size_t extra_size,
+					     size_t * offset);
 
-extern void wsbmDeleteBuffers(unsigned n, struct _WsbmBufferObject *buffers[]);
-extern struct _WsbmBufferList *wsbmBOCreateList(int target, 
+extern void wsbmDeleteBuffers(unsigned n,
+			      struct _WsbmBufferObject *buffers[]);
+extern struct _WsbmBufferList *wsbmBOCreateList(int target,
 						int hasKernelBuffers);
 extern int wsbmBOResetList(struct _WsbmBufferList *list);
 extern int wsbmBOAddListItem(struct _WsbmBufferList *list,
-			    struct _WsbmBufferObject *buf,
-			    uint64_t flags, uint64_t mask, int *itemLoc,
-			    struct _ValidateNode **node);
+			     struct _WsbmBufferObject *buf,
+			     uint64_t flags, uint64_t mask, int *itemLoc,
+			     struct _ValidateNode **node);
 
 extern void wsbmBOFreeList(struct _WsbmBufferList *list);
 extern int wsbmBOFenceUserList(struct _WsbmBufferList *list,
@@ -139,11 +141,11 @@ extern int wsbmBOValidateUserList(struct _WsbmBufferList *list);
 extern int wsbmBOUnvalidateUserList(struct _WsbmBufferList *list);
 
 extern void wsbmBOFence(struct _WsbmBufferObject *buf,
-		       struct _WsbmFenceObject *fence);
+			struct _WsbmFenceObject *fence);
 
 extern void wsbmPoolTakeDown(struct _WsbmBufferPool *pool);
 extern int wsbmBOSetReferenced(struct _WsbmBufferObject *buf,
-			      unsigned long handle);
+			       unsigned long handle);
 unsigned long wsbmBOSize(struct _WsbmBufferObject *buf);
 extern void wsbmBOWaitIdle(struct _WsbmBufferObject *buf, int lazy);
 extern int wsbmBOOnList(const struct _WsbmBufferObject *buf);
@@ -155,14 +157,11 @@ extern void wsbmReadUnlockKernelBO(void);
 extern void wsbmWriteLockKernelBO(void);
 extern void wsbmWriteUnlockKernelBO(void);
 
-extern int wsbmInit(struct _WsbmThreadFuncs *tf,
-		     struct _WsbmVNodeFuncs *vf);
+extern int wsbmInit(struct _WsbmThreadFuncs *tf, struct _WsbmVNodeFuncs *vf);
 extern void wsbmTakedown(void);
 extern int wsbmIsInitialized(void);
 extern void wsbmCommonDataSet(void *d);
 extern void *wsbmCommonDataGet(void);
-
-
 
 extern struct _ValidateList *wsbmGetKernelValidateList(struct _WsbmBufferList
 						       *list);
@@ -175,9 +174,8 @@ extern void *validateListNext(struct _ValidateList *list, void *iterator);
 
 extern uint32_t wsbmKBufHandle(const struct _WsbmKernelBuf *);
 extern void wsbmUpdateKBuf(struct _WsbmKernelBuf *,
-			   uint64_t gpuOffset, 
-			   uint32_t placement,
-			   uint32_t fence_flags);
+			   uint64_t gpuOffset,
+			   uint32_t placement, uint32_t fence_flags);
 
 extern struct _WsbmKernelBuf *wsbmKBuf(const struct _WsbmBufferObject *buf);
 

@@ -39,25 +39,25 @@
 #define WSBM_MUTEX_SPACE 16
 #define WSBM_COND_SPACE  16
 
-struct _WsbmMutex {
+struct _WsbmMutex
+{
     struct _WsbmThreadFuncs *func;
     unsigned long storage[WSBM_MUTEX_SPACE];
 };
 
-struct _WsbmCond {
+struct _WsbmCond
+{
     struct _WsbmThreadFuncs *func;
     unsigned long storage[WSBM_COND_SPACE];
 };
 
 struct _WsbmThreadFuncs
 {
-    int (*mutexInit) (struct _WsbmMutex *, 
-		       struct _WsbmThreadFuncs *);
+    int (*mutexInit) (struct _WsbmMutex *, struct _WsbmThreadFuncs *);
     void (*mutexFree) (struct _WsbmMutex *);
     void (*mutexLock) (struct _WsbmMutex *);
     void (*mutexUnlock) (struct _WsbmMutex *);
-    int (*condInit) (struct _WsbmCond *, 
-		      struct _WsbmThreadFuncs *);
+    int (*condInit) (struct _WsbmCond *, struct _WsbmThreadFuncs *);
     void (*condFree) (struct _WsbmCond *);
     void (*condWait) (struct _WsbmCond *, struct _WsbmMutex *);
     void (*condBroadcast) (struct _WsbmCond *);

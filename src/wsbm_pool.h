@@ -46,7 +46,7 @@ struct _WsbmBufStorage
     struct _WsbmMutex mutex;
     struct _WsbmAtomic refCount;
     struct _WsbmAtomic onList;
-    void * destroyArg;
+    void *destroyArg;
     void (*destroyContainer) (void *);
 };
 
@@ -57,35 +57,37 @@ struct _WsbmBufferPool
     int fd;
     int (*map) (struct _WsbmBufStorage * buf, unsigned mode, void **virtual);
     void (*unmap) (struct _WsbmBufStorage * buf);
-    int (*syncforcpu) (struct _WsbmBufStorage *buf, unsigned mode);
-    void (*releasefromcpu) (struct _WsbmBufStorage *buf, unsigned mode);
+    int (*syncforcpu) (struct _WsbmBufStorage * buf, unsigned mode);
+    void (*releasefromcpu) (struct _WsbmBufStorage * buf, unsigned mode);
     void (*destroy) (struct _WsbmBufStorage ** buf);
     unsigned long (*offset) (struct _WsbmBufStorage * buf);
     unsigned long (*poolOffset) (struct _WsbmBufStorage * buf);
-    uint32_t(*placement) (struct _WsbmBufStorage * buf);
+        uint32_t(*placement) (struct _WsbmBufStorage * buf);
     unsigned long (*size) (struct _WsbmBufStorage * buf);
     struct _WsbmKernelBuf *(*kernel) (struct _WsbmBufStorage * buf);
     struct _WsbmBufStorage *(*create) (struct _WsbmBufferPool * pool,
-				      unsigned long size,
-				      uint32_t placement, unsigned alignment);
-    struct _WsbmBufStorage *(*createByReference) (struct _WsbmBufferPool * pool,
-						 uint32_t handle);
+				       unsigned long size,
+				       uint32_t placement,
+				       unsigned alignment);
+    struct _WsbmBufStorage *(*createByReference) (struct _WsbmBufferPool *
+						  pool, uint32_t handle);
     void (*fence) (struct _WsbmBufStorage * buf,
-		  struct _WsbmFenceObject * fence);
+		   struct _WsbmFenceObject * fence);
     void (*unvalidate) (struct _WsbmBufStorage * buf);
     int (*validate) (struct _WsbmBufStorage * buf, uint64_t set_flags,
 		     uint64_t clr_flags);
     int (*waitIdle) (struct _WsbmBufStorage * buf, int lazy);
-    int (*setStatus) (struct _WsbmBufStorage * buf, 
-		      uint32_t set_placement,
-		      uint32_t clr_placement);
+    int (*setStatus) (struct _WsbmBufStorage * buf,
+		      uint32_t set_placement, uint32_t clr_placement);
     void (*takeDown) (struct _WsbmBufferPool * pool);
 };
 
 static inline int
-wsbmBufStorageInit(struct _WsbmBufStorage *storage, struct _WsbmBufferPool *pool)
+wsbmBufStorageInit(struct _WsbmBufStorage *storage,
+		   struct _WsbmBufferPool *pool)
 {
     int ret = WSBM_MUTEX_INIT(&storage->mutex);
+
     if (ret)
 	return -ENOMEM;
     storage->pool = pool;
@@ -126,32 +128,34 @@ wsbmBufStorageUnref(struct _WsbmBufStorage **pStorage)
  * Kernel buffer objects. Size in multiples of page size. Page size aligned.
  */
 
-extern struct _WsbmBufferPool *wsbmTTMPoolInit(int fd, unsigned int devOffset);
+extern struct _WsbmBufferPool *wsbmTTMPoolInit(int fd,
+					       unsigned int devOffset);
 extern struct _WsbmBufferPool *wsbmMallocPoolInit(void);
 
 struct _WsbmSlabCache;
-extern struct _WsbmBufferPool * wsbmSlabPoolInit(int fd, uint32_t devOffset,
-						 uint32_t placement,
-						 uint32_t validMask,
-						 uint32_t smallestSize,
-						 uint32_t numSizes,
-						 uint32_t desiredNumBuffers,
-						 uint32_t maxSlabSize,
-						 uint32_t pageAlignment,
-						 struct _WsbmSlabCache *cache);
-extern struct _WsbmSlabCache *
-wsbmSlabCacheInit(uint32_t checkIntervalMsec, uint32_t slabTimeoutMsec);
+extern struct _WsbmBufferPool *wsbmSlabPoolInit(int fd, uint32_t devOffset,
+						uint32_t placement,
+						uint32_t validMask,
+						uint32_t smallestSize,
+						uint32_t numSizes,
+						uint32_t desiredNumBuffers,
+						uint32_t maxSlabSize,
+						uint32_t pageAlignment,
+						struct _WsbmSlabCache *cache);
+extern struct _WsbmSlabCache *wsbmSlabCacheInit(uint32_t checkIntervalMsec,
+						uint32_t slabTimeoutMsec);
 extern void wsbmSlabCacheFinish(struct _WsbmSlabCache *cache);
 
-extern struct _WsbmBufferPool *
-wsbmUserPoolInit(void *vramAddr,
-		 unsigned long vramStart, unsigned long vramSize,
-		 void *agpAddr, unsigned long agpStart, 
-		 unsigned long agpSize,
-		 uint32_t (*fenceTypes) (uint64_t set_flags));
+extern struct _WsbmBufferPool *wsbmUserPoolInit(void *vramAddr,
+						unsigned long vramStart,
+						unsigned long vramSize,
+						void *agpAddr,
+						unsigned long agpStart,
+						unsigned long agpSize,
+						uint32_t(*fenceTypes)
+						    (uint64_t set_flags));
 
 extern void wsbmUserPoolClean(struct _WsbmBufferPool *pool,
-			      int cleanVram,
-			      int cleanAgp);
+			      int cleanVram, int cleanAgp);
 
 #endif

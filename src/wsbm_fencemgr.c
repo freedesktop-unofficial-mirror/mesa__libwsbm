@@ -42,7 +42,8 @@
 #include <string.h>
 #include <unistd.h>
 
-struct _WsbmFenceClass {
+struct _WsbmFenceClass
+{
     struct _WsbmListHead head;
     struct _WsbmMutex mutex;
     struct _WsbmMutex cmd_mutex;
@@ -115,7 +116,7 @@ struct _WsbmFenceMgr *
 wsbmFenceMgrCreate(const struct _WsbmFenceMgrCreateInfo *info)
 {
     struct _WsbmFenceMgr *tmp;
-    uint32_t i,j;
+    uint32_t i, j;
     int ret;
 
     tmp = calloc(1, sizeof(*tmp));
@@ -129,6 +130,7 @@ wsbmFenceMgrCreate(const struct _WsbmFenceMgrCreateInfo *info)
 
     for (i = 0; i < tmp->info.num_classes; ++i) {
 	struct _WsbmFenceClass *fc = &tmp->classes[i];
+
 	WSBMINITLISTHEAD(&fc->head);
 	ret = WSBM_MUTEX_INIT(&fc->mutex);
 	if (ret)
@@ -143,8 +145,8 @@ wsbmFenceMgrCreate(const struct _WsbmFenceMgrCreateInfo *info)
 
     return tmp;
 
- out_err1:
-    for (j=0; j<i; ++j) {
+  out_err1:
+    for (j = 0; j < i; ++j) {
 	WSBM_MUTEX_FREE(&tmp->classes[j].mutex);
 	WSBM_MUTEX_FREE(&tmp->classes[j].cmd_mutex);
     }
@@ -168,9 +170,10 @@ wsbmFenceUnreference(struct _WsbmFenceObject **pFence)
     mgr = fence->mgr;
     if (wsbmAtomicDecZero(&fence->refCount)) {
 	struct _WsbmFenceClass *fc = &mgr->classes[fence->fence_class];
-	WSBM_MUTEX_LOCK(&fc->mutex);	
+
+	WSBM_MUTEX_LOCK(&fc->mutex);
 	WSBMLISTDELINIT(&fence->head);
-	WSBM_MUTEX_UNLOCK(&fc->mutex);	
+	WSBM_MUTEX_UNLOCK(&fc->mutex);
 	if (fence->private)
 	    mgr->info.unreference(mgr, &fence->private);
 	fence->mgr = NULL;
@@ -193,21 +196,24 @@ wsbmSignalPreviousFences(struct _WsbmFenceMgr *mgr,
     WSBM_MUTEX_LOCK(&fc->mutex);
     while (list != &fc->head && list->next != list) {
 	entry = WSBMLISTENTRY(list, struct _WsbmFenceObject, head);
+
 	prev = list->prev;
 
 	do {
 	    old_signaled_types = wsbmAtomicRead(&entry->signaled_types);
-	    signaled_types = old_signaled_types | (signaled_types & entry->fence_type);
+	    signaled_types =
+		old_signaled_types | (signaled_types & entry->fence_type);
 	    if (signaled_types == old_signaled_types)
 		break;
 
-	    ret_st = wsbmAtomicCmpXchg(&entry->signaled_types, old_signaled_types,
-				       signaled_types);
-	} while(ret_st != old_signaled_types);
+	    ret_st =
+		wsbmAtomicCmpXchg(&entry->signaled_types, old_signaled_types,
+				  signaled_types);
+	} while (ret_st != old_signaled_types);
 
 	if (signaled_types == entry->fence_type)
 	    WSBMLISTDELINIT(list);
-    
+
 	list = prev;
     }
     WSBM_MUTEX_UNLOCK(&fc->mutex);
@@ -215,11 +221,10 @@ wsbmSignalPreviousFences(struct _WsbmFenceMgr *mgr,
 
 int
 wsbmFenceFinish(struct _WsbmFenceObject *fence, uint32_t fence_type,
-	       int lazy_hint)
+		int lazy_hint)
 {
     struct _WsbmFenceMgr *mgr = fence->mgr;
     int ret = 0;
-
 
     if ((wsbmAtomicRead(&fence->signaled_types) & fence_type) == fence_type)
 	goto out;
@@ -230,7 +235,7 @@ wsbmFenceFinish(struct _WsbmFenceObject *fence, uint32_t fence_type,
 
     wsbmSignalPreviousFences(mgr, &fence->head, fence->fence_class,
 			     fence_type);
- out:
+  out:
     return ret;
 }
 
@@ -242,7 +247,7 @@ wsbmFenceSignaledTypeCached(struct _WsbmFenceObject * fence)
 
 int
 wsbmFenceSignaledType(struct _WsbmFenceObject *fence, uint32_t flush_type,
-		     uint32_t * signaled)
+		      uint32_t * signaled)
 {
     int ret = 0;
     struct _WsbmFenceMgr *mgr;
@@ -271,8 +276,8 @@ wsbmFenceSignaledType(struct _WsbmFenceObject *fence, uint32_t flush_type,
 				   signaled_types);
 	if (old_signaled_types == ret_st)
 	    wsbmSignalPreviousFences(mgr, &fence->head, fence->fence_class,
-				     *signaled);	    
-    } while(old_signaled_types != ret_st);
+				     *signaled);
+    } while (old_signaled_types != ret_st);
 
     return 0;
   out0:
@@ -304,11 +309,11 @@ wsbmFenceCreate(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
     if (!fence)
 	goto out_err;
 
-    wsbmAtomicSet(&fence->refCount,1);
+    wsbmAtomicSet(&fence->refCount, 1);
     fence->mgr = mgr;
     fence->fence_class = fence_class;
     fence->fence_type = fence_type;
-    wsbmAtomicSet(&fence->signaled_types,0);
+    wsbmAtomicSet(&fence->signaled_types, 0);
     fence->private = private;
     if (private_size) {
 	fence->private = (void *)(((uint8_t *) fence) + fence_size);
@@ -370,13 +375,11 @@ tFinish(struct _WsbmFenceMgr *mgr, void *private, uint32_t fence_type,
 {
     struct _WsbmTTMFenceMgrPriv *priv =
 	(struct _WsbmTTMFenceMgrPriv *)mgr->private;
-    union ttm_fence_finish_arg arg = 
-	{.req = 
-	 {.handle = (unsigned long)private,
-	  .fence_type = fence_type,
-	  .mode = (lazy_hint) ? TTM_FENCE_FINISH_MODE_LAZY : 0
-	 }
-	};
+    union ttm_fence_finish_arg arg =
+	{.req = {.handle = (unsigned long)private,
+		 .fence_type = fence_type,
+		 .mode = (lazy_hint) ? TTM_FENCE_FINISH_MODE_LAZY : 0}
+    };
     int ret;
 
     do {
@@ -392,7 +395,7 @@ tUnref(struct _WsbmFenceMgr *mgr, void **private)
 {
     struct _WsbmTTMFenceMgrPriv *priv =
 	(struct _WsbmTTMFenceMgrPriv *)mgr->private;
-    struct ttm_fence_unref_arg arg = {.handle = (unsigned long) *private };
+    struct ttm_fence_unref_arg arg = {.handle = (unsigned long)*private };
 
     *private = NULL;
 
@@ -429,18 +432,17 @@ wsbmFenceMgrTTMInit(int fd, unsigned int numClass, unsigned int devOffset)
     return mgr;
 }
 
-void wsbmFenceCmdLock(struct _WsbmFenceMgr *mgr,
-		      uint32_t fence_class)
+void
+wsbmFenceCmdLock(struct _WsbmFenceMgr *mgr, uint32_t fence_class)
 {
     WSBM_MUTEX_LOCK(&mgr->classes[fence_class].cmd_mutex);
-} 
+}
 
-void wsbmFenceCmdUnlock(struct _WsbmFenceMgr *mgr,
-		      uint32_t fence_class)
+void
+wsbmFenceCmdUnlock(struct _WsbmFenceMgr *mgr, uint32_t fence_class)
 {
     WSBM_MUTEX_UNLOCK(&mgr->classes[fence_class].cmd_mutex);
-} 
-
+}
 
 void
 wsbmFenceMgrTTMTakedown(struct _WsbmFenceMgr *mgr)
@@ -453,7 +455,7 @@ wsbmFenceMgrTTMTakedown(struct _WsbmFenceMgr *mgr)
     if (mgr->private)
 	free(mgr->private);
 
-    for (i=0; i<mgr->info.num_classes; ++i) {
+    for (i = 0; i < mgr->info.num_classes; ++i) {
 	WSBM_MUTEX_FREE(&mgr->classes[i].mutex);
 	WSBM_MUTEX_FREE(&mgr->classes[i].cmd_mutex);
     }

@@ -53,7 +53,7 @@ extern uint32_t wsbmFenceSignaledTypeCached(struct _WsbmFenceObject *fence);
  * underlying mechanism must make sure will eventually signal.
  */
 extern int wsbmFenceSignaledType(struct _WsbmFenceObject *fence,
-				uint32_t flush_type, uint32_t * signaled);
+				 uint32_t flush_type, uint32_t * signaled);
 
 /*
  * Convenience functions.
@@ -82,7 +82,7 @@ wsbmFenceSignaledCached(struct _WsbmFenceObject *fence, uint32_t flush_type)
  * Reference a fence object.
  */
 extern struct _WsbmFenceObject *wsbmFenceReference(struct _WsbmFenceObject
-						 *fence);
+						   *fence);
 
 /*
  * Unreference a fence object. The fence object pointer will be reset to NULL.
@@ -95,8 +95,8 @@ extern void wsbmFenceUnreference(struct _WsbmFenceObject **pFence);
  * If "lazy_hint" is true, it indicates that the wait may sleep to avoid
  * busy-wait polling.
  */
-extern int wsbmFenceFinish(struct _WsbmFenceObject *fence, uint32_t fence_type,
-			  int lazy_hint);
+extern int wsbmFenceFinish(struct _WsbmFenceObject *fence,
+			   uint32_t fence_type, int lazy_hint);
 
 /*
  * Create a WsbmFenceObject for manager "mgr".
@@ -111,10 +111,10 @@ extern int wsbmFenceFinish(struct _WsbmFenceObject *fence, uint32_t fence_type,
  * "private" may be destroyed after the call to wsbmFenceCreate.
  */
 extern struct _WsbmFenceObject *wsbmFenceCreate(struct _WsbmFenceMgr *mgr,
-					      uint32_t fence_class,
-					      uint32_t fence_type,
-					      void *private,
-					      size_t private_size);
+						uint32_t fence_class,
+						uint32_t fence_type,
+						void *private,
+						size_t private_size);
 
 extern uint32_t wsbmFenceType(struct _WsbmFenceObject *fence);
 
@@ -138,16 +138,17 @@ struct _WsbmFenceMgrCreateInfo
 };
 
 extern struct _WsbmFenceMgr *wsbmFenceMgrCreate(const struct
-					      _WsbmFenceMgrCreateInfo *info);
-extern void wsbmFenceCmdLock(struct _WsbmFenceMgr *mgr,
-			     uint32_t fence_class);
+						_WsbmFenceMgrCreateInfo
+						*info);
+extern void wsbmFenceCmdLock(struct _WsbmFenceMgr *mgr, uint32_t fence_class);
 extern void wsbmFenceCmdUnlock(struct _WsbmFenceMgr *mgr,
 			       uint32_t fence_class);
 /*
  * Builtin drivers.
  */
 
-extern struct _WsbmFenceMgr *wsbmFenceMgrTTMInit(int fd, unsigned int numClass,
-					       unsigned int devOffset);
+extern struct _WsbmFenceMgr *wsbmFenceMgrTTMInit(int fd,
+						 unsigned int numClass,
+						 unsigned int devOffset);
 extern void wsbmFenceMgrTTMTakedown(struct _WsbmFenceMgr *mgr);
 #endif

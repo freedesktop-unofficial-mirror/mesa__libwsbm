@@ -69,6 +69,7 @@ extern struct _WsbmMMNode *wsbmMMGetBlock(struct _WsbmMMNode *parent,
 					  unsigned alignment);
 extern void wsbmMMPutBlock(struct _WsbmMMNode *cur);
 extern void wsbmMMtakedown(struct _WsbmMM *mm);
-extern int wsbmMMinit(struct _WsbmMM *mm, unsigned long start, unsigned long size);
+extern int wsbmMMinit(struct _WsbmMM *mm, unsigned long start,
+		      unsigned long size);
 extern int wsbmMMclean(struct _WsbmMM *mm);
 #endif

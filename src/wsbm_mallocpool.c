@@ -97,13 +97,13 @@ pool_unmap(struct _WsbmBufStorage *buf)
 }
 
 static int
-pool_syncforcpu (struct _WsbmBufStorage *buf, unsigned mode)
+pool_syncforcpu(struct _WsbmBufStorage *buf, unsigned mode)
 {
     return 0;
 }
-    
+
 static void
-pool_releasefromcpu (struct _WsbmBufStorage *buf, unsigned mode) 
+pool_releasefromcpu(struct _WsbmBufStorage *buf, unsigned mode)
 {
     ;
 }
