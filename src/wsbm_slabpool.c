@@ -680,6 +680,8 @@ wsbmSlabAllocBuffer(struct _WsbmSlabSizeHeader *header)
     WSBM_MUTEX_UNLOCK(&header->mutex);
     buf = WSBMLISTENTRY(list, struct _WsbmSlabBuffer, head);
 
+    buf->storage.destroyContainer = NULL;
+
 #ifdef DEBUG_FENCESIGNALED
     createbuffer++;
 #endif
