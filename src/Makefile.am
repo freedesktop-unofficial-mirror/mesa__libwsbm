@@ -2,7 +2,7 @@
 lib_LTLIBRARIES = libwsbm.la
 
 libwsbm_la_CFLAGS = @libdrm_CFLAGS@ -Wall 
-libwsbm_la_LDFLAGS = -version-number 1:0:0 -no-undefined @libdrm_LIBS@
+libwsbm_la_LDFLAGS = -version-number 1:1:0 -no-undefined @libdrm_LIBS@
 libwsbm_la_SOURCES = \
 	wsbm_fencemgr.c \
 	wsbm_fencemgr.h \

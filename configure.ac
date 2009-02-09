@@ -1,5 +1,5 @@
 AC_PREREQ(2.57)
-AC_INIT([libwsbm], 1.0.0, [thomas@tungstengraphics.com], libwsbm)
+AC_INIT([libwsbm], 1.1.0, [thomas@tungstengraphics.com], libwsbm)
 AC_CONFIG_SRCDIR([Makefile.am])
 AM_INIT_AUTOMAKE([dist-bzip2])
 

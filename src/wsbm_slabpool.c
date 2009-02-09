@@ -988,9 +988,11 @@ pool_fence(struct _WsbmBufStorage *buf, struct _WsbmFenceObject *fence)
     if (sBuf->fence)
 	wsbmFenceUnreference(&sBuf->fence);
 
-    sBuf->fence = wsbmFenceReference(fence);
     kBuf = pool_kernel(buf);
     sBuf->fenceType = kBuf->fence_type_mask;
+    if (!wsbmFenceSignaledCached(fence, sBuf->fenceType))
+	sBuf->fence = wsbmFenceReference(fence);
+
     sBuf->unFenced = 0;
     WSBM_COND_BROADCAST(&sBuf->event);
     WSBM_MUTEX_UNLOCK(&buf->mutex);

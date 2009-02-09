@@ -116,6 +116,14 @@ extern struct _WsbmFenceObject *wsbmFenceCreate(struct _WsbmFenceMgr *mgr,
 						void *private,
 						size_t private_size);
 
+
+extern struct _WsbmFenceObject *wsbmFenceCreateSig(struct _WsbmFenceMgr *mgr,
+						   uint32_t fence_class,
+						   uint32_t fence_type,
+						   uint32_t signaled_types,
+						   void *private,
+						   size_t private_size);
+
 extern uint32_t wsbmFenceType(struct _WsbmFenceObject *fence);
 
 /*

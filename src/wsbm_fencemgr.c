@@ -294,8 +294,9 @@ wsbmFenceReference(struct _WsbmFenceObject *fence)
 }
 
 struct _WsbmFenceObject *
-wsbmFenceCreate(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
-		uint32_t fence_type, void *private, size_t private_size)
+wsbmFenceCreateSig(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
+		   uint32_t fence_type, uint32_t signaled_types, 
+		   void *private, size_t private_size)
 {
     struct _WsbmFenceClass *fc = &mgr->classes[fence_class];
     struct _WsbmFenceObject *fence;
@@ -313,7 +314,7 @@ wsbmFenceCreate(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
     fence->mgr = mgr;
     fence->fence_class = fence_class;
     fence->fence_type = fence_type;
-    wsbmAtomicSet(&fence->signaled_types, 0);
+    wsbmAtomicSet(&fence->signaled_types, signaled_types);
     fence->private = private;
     if (private_size) {
 	fence->private = (void *)(((uint8_t *) fence) + fence_size);
@@ -338,6 +339,14 @@ wsbmFenceCreate(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
 
     mgr->info.unreference(mgr, &private);
     return NULL;
+}
+
+struct _WsbmFenceObject *
+wsbmFenceCreate(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
+		uint32_t fence_type, void *private, size_t private_size)
+{
+  return wsbmFenceCreateSig(mgr, fence_class, fence_type, 0, private,
+			    private_size);
 }
 
 struct _WsbmTTMFenceMgrPriv
