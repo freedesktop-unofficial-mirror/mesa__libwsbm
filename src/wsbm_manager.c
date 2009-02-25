@@ -47,8 +47,6 @@
 #include "wsbm_atomic.h"
 #include "assert.h"
 
-#define WSBM_LIST_HASHTAB_SIZE 256
-#define WSBM_LIST_HASHTAB_MASK 0xff
 #define WSBM_BODATA_SIZE_ACCEPT 4096
 
 #define WSBM_BUFFER_COMPLEX 0
@@ -60,10 +58,12 @@ struct _ValidateList
     unsigned numTarget;
     unsigned numCurrent;
     unsigned numOnList;
+    unsigned hashSize;
+    uint32_t hashMask;
     int driverData;
     struct _WsbmListHead list;
     struct _WsbmListHead free;
-    struct _WsbmListHead hashTable[WSBM_LIST_HASHTAB_SIZE];
+    struct _WsbmListHead *hashTable;
 };
 
 struct _WsbmBufferObject
@@ -175,7 +175,7 @@ validateListAddNode(struct _ValidateList *list, void *item,
 }
 
 static uint32_t
-wsbmHashFunc(uint8_t * key, uint32_t len)
+wsbmHashFunc(uint8_t * key, uint32_t len, uint32_t mask)
 {
     uint32_t hash, i;
 
@@ -189,7 +189,7 @@ wsbmHashFunc(uint8_t * key, uint32_t len)
     hash ^= (hash >> 11);
     hash += (hash << 15);
 
-    return hash & WSBM_LIST_HASHTAB_MASK;
+    return hash & mask;
 }
 
 static void
@@ -219,6 +219,7 @@ validateFreeList(struct _ValidateList *list)
 	l = list->free.next;
 	list->numCurrent--;
     }
+    free(list->hashTable);
 }
 
 static int
@@ -251,12 +252,33 @@ validateListAdjustNodes(struct _ValidateList *list)
     return ret;
 }
 
+static inline int
+wsbmPot(unsigned int val)
+{
+    unsigned int shift = 0;
+    while(val > (1 << shift))
+	shift++;
+
+    return shift;
+}
+
+
+
 static int
 validateCreateList(int numTarget, struct _ValidateList *list, int driverData)
 {
     int i;
+    unsigned int shift = wsbmPot(numTarget);
+    int ret;
 
-    for (i = 0; i < WSBM_LIST_HASHTAB_SIZE; ++i)
+    list->hashSize = (1 << shift);
+    list->hashMask = list->hashSize - 1;
+
+    list->hashTable = malloc(list->hashSize * sizeof(*list->hashTable));
+    if (!list->hashTable)
+	return -ENOMEM;
+
+    for (i = 0; i < list->hashSize; ++i)
 	WSBMINITLISTHEAD(&list->hashTable[i]);
 
     WSBMINITLISTHEAD(&list->list);
@@ -265,7 +287,11 @@ validateCreateList(int numTarget, struct _ValidateList *list, int driverData)
     list->numCurrent = 0;
     list->numOnList = 0;
     list->driverData = driverData;
-    return validateListAdjustNodes(list);
+    ret = validateListAdjustNodes(list);
+    if (ret != 0)
+	free(list->hashTable);
+
+    return ret;
 }
 
 static int
@@ -902,7 +928,7 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
     uint32_t hash;
 
     cur = NULL;
-    hash = wsbmHashFunc((uint8_t *) buf, (sizeof(buf)));
+    hash = wsbmHashFunc((uint8_t *) buf, (sizeof(buf)), list->hashMask);
     hashHead = list->hashTable + hash;
     *newItem = 0;
 
@@ -1023,6 +1049,7 @@ wsbmBOUnrefUserList(struct _WsbmBufferList *list)
 
     return wsbmBOResetList(list);
 }
+
 
 int
 wsbmBOFenceUserList(struct _WsbmBufferList *list,
