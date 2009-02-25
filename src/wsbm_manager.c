@@ -926,13 +926,16 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
     struct _WsbmListHead *l;
     struct _WsbmListHead *hashHead;
     uint32_t hash;
+    uint32_t count = 0;
+    uint32_t key = (unsigned long) buf;
 
     cur = NULL;
-    hash = wsbmHashFunc((uint8_t *) buf, (sizeof(buf)), list->hashMask);
+    hash = wsbmHashFunc((uint8_t *) &key, 4, list->hashMask);
     hashHead = list->hashTable + hash;
     *newItem = 0;
 
     for (l = hashHead->next; l != hashHead; l = l->next) {
+        count++;
 	node = WSBMLISTENTRY(l, struct _ValidateNode, hashHead);
 
 	if (node->buf == buf) {
@@ -940,6 +943,7 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
 	    break;
 	}
     }
+
     if (!cur) {
 	cur = validateListAddNode(list, buf, hash, flags, mask);
 	if (!cur)
