@@ -392,8 +392,8 @@ tFinish(struct _WsbmFenceMgr *mgr, void *private, uint32_t fence_type,
     int ret;
 
     do {
-	ret = drmCommandWrite(priv->fd, priv->devOffset + TTM_FENCE_FINISH,
-			      &arg, sizeof(arg));
+	ret = drmCommandWriteRead(priv->fd, priv->devOffset + TTM_FENCE_FINISH,
+				  &arg, sizeof(arg));
     } while (ret == -EAGAIN || ret == -ERESTART);
 
     return ret;
