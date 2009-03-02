@@ -506,9 +506,9 @@ wsbmAllocSlab(struct _WsbmSlabSizeHeader *header)
 	}
 	sBuf++;
     }
+    free(slab->buffers);
   out_err1:
     wsbmSetKernelBOFree(header->slabPool->cache, slab->kbo);
-    free(slab->buffers);
   out_err0:
     free(slab);
     return ret;
