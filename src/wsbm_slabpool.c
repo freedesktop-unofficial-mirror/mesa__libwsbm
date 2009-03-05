@@ -571,7 +571,7 @@ wsbmSlabFreeBufferLocked(struct _WsbmSlabBuffer *buf)
 static void
 wsbmSlabCheckFreeLocked(struct _WsbmSlabSizeHeader *header, int wait)
 {
-    struct _WsbmListHead *list, *prev, *first;
+  struct _WsbmListHead *list, *prev, *first, *head;
     struct _WsbmSlabBuffer *sBuf;
     struct _WsbmSlab *slab;
     int firstWasSignaled = 1;
@@ -603,7 +603,8 @@ wsbmSlabCheckFreeLocked(struct _WsbmSlabSizeHeader *header, int wait)
 	 * through since we're currently the only user.
 	 */
 
-	WSBMLISTFOREACHPREVSAFE(list, prev, first->next) {
+	head = first->next;
+	WSBMLISTFOREACHPREVSAFE(list, prev, head) {
 
 	    if (list == &header->delayedBuffers)
 		break;
