@@ -444,6 +444,7 @@ wsbmBOSetStatus(struct _WsbmBufferObject *buf,
 		uint32_t setFlags, uint32_t clrFlags)
 {
     struct _WsbmBufStorage *storage = buf->storage;
+    int ret;
 
     if (!storage)
 	return 0;
@@ -451,7 +452,12 @@ wsbmBOSetStatus(struct _WsbmBufferObject *buf,
     if (storage->pool->setStatus == NULL)
 	return -EINVAL;
 
-    return storage->pool->setStatus(storage, setFlags, clrFlags);
+    ret = storage->pool->setStatus(storage, setFlags, clrFlags);
+    if (ret)
+	return ret;
+    
+    buf->placement = (buf->placement | setFlags) & ~(clrFlags);
+    return 0;
 }
 
 void
@@ -918,8 +924,9 @@ wsbmBOFreeList(struct _WsbmBufferList *list)
 }
 
 static int
-wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
-		    uint64_t mask, int *itemLoc,
+wsbmAddValidateItem(struct _ValidateList *list, void *buf, 
+		    uint32_t def_placement, uint64_t flags, uint64_t mask, 
+		    int *itemLoc,
 		    struct _ValidateNode **pnode, int *newItem)
 {
     struct _ValidateNode *node, *cur;
@@ -945,7 +952,10 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
     }
 
     if (!cur) {
-	cur = validateListAddNode(list, buf, hash, flags, mask);
+        uint64_t first_flags = ((uint64_t) def_placement & ~mask) |
+	    (flags & mask & ~WSBM_PL_MASK_MEM_CACHE);
+
+	cur = validateListAddNode(list, buf, hash, first_flags, mask);
 	if (!cur)
 	    return -ENOMEM;
 	*newItem = 1;
@@ -954,8 +964,8 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
 	uint64_t set_flags = flags & mask;
 	uint64_t clr_flags = (~flags) & mask;
 
-	if (((cur->clr_flags | clr_flags) & WSBM_PL_MASK_MEM) ==
-	    WSBM_PL_MASK_MEM) {
+	if (((cur->clr_flags | clr_flags) & WSBM_PL_MASK_MEM_CACHE) ==
+	    WSBM_PL_MASK_MEM_CACHE) {
 	    /*
 	     * No available memory type left. Bail.
 	     */
@@ -963,15 +973,15 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
 	}
 
 	if ((cur->set_flags | set_flags) &
-	    (cur->clr_flags | clr_flags) & ~WSBM_PL_MASK_MEM) {
+	    (cur->clr_flags | clr_flags) & ~WSBM_PL_MASK_MEM_CACHE) {
 	    /*
 	     * Conflicting flags. Bail.
 	     */
 	    return -EINVAL;
 	}
 
-	cur->set_flags &= ~(clr_flags & WSBM_PL_MASK_MEM);
-	cur->set_flags |= (set_flags & ~WSBM_PL_MASK_MEM);
+	cur->set_flags &= ~(clr_flags & WSBM_PL_MASK_MEM_CACHE);
+	cur->set_flags |= (set_flags & ~WSBM_PL_MASK_MEM_CACHE);
 	cur->clr_flags |= clr_flags;
     }
     *itemLoc = cur->listItem;
@@ -995,7 +1005,8 @@ wsbmBOAddListItem(struct _WsbmBufferList *list,
     if (list->hasKernelBuffers) {
 	ret = wsbmAddValidateItem(&list->kernelBuffers,
 				  storage->pool->kernel(storage),
-				  flags, mask, itemLoc, node, &dummy);
+				  buf->placement, flags, mask, itemLoc, 
+				  node, &dummy);
 	if (ret)
 	    goto out_unlock;
     } else {
@@ -1004,7 +1015,8 @@ wsbmBOAddListItem(struct _WsbmBufferList *list,
     }
 
     ret = wsbmAddValidateItem(&list->userBuffers, storage,
-			      flags, mask, &dummy, &dummyNode, &newItem);
+			      buf->placement, flags, mask, &dummy, 
+			      &dummyNode, &newItem);
     if (ret)
 	goto out_unlock;
 
