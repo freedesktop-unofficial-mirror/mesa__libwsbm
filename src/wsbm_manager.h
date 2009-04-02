@@ -75,11 +75,6 @@ struct _WsbmBufferList;
 #define WSBM_SYNCCPU_DONT_BLOCK  (1 << 2)
 #define WSBM_SYNCCPU_TRY_CACHED  (1 << 3)
 
-#define WSBM_PL_MASK_MEM_CACHE    (WSBM_PL_MASK_MEM | \
-				  WSBM_PL_FLAG_CACHED | \
-				  WSBM_PL_FLAG_UNCACHED | \
-				  WSBM_PL_FLAG_WC)
-
 extern void *wsbmBOMap(struct _WsbmBufferObject *buf, unsigned mode);
 extern void wsbmBOUnmap(struct _WsbmBufferObject *buf);
 extern int wsbmBOSyncForCpu(struct _WsbmBufferObject *buf, unsigned mode);
