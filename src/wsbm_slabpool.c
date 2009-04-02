@@ -986,6 +986,12 @@ pool_offset(struct _WsbmBufStorage *buf)
     return pool_kernel(buf)->gpuOffset + pool_poolOffset(buf);
 }
 
+static uint32_t
+pool_placement(struct _WsbmBufStorage *buf)
+{
+    return pool_kernel(buf)->placement;
+}
+
 static void
 pool_fence(struct _WsbmBufStorage *buf, struct _WsbmFenceObject *fence)
 {
@@ -1188,6 +1194,7 @@ wsbmSlabPoolInit(int fd,
     pool->destroy = &pool_destroy;
     pool->offset = &pool_offset;
     pool->poolOffset = &pool_poolOffset;
+    pool->placement = &pool_placement;
     pool->size = &pool_size;
     pool->create = &pool_create;
     pool->fence = &pool_fence;
