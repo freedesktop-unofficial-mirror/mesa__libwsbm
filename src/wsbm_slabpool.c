@@ -340,7 +340,8 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
 
 	if ((kboTmp->actualSize == size) &&
 	    (slabPool->pageAlignment == 0 ||
-	     (kboTmp->pageAlignment % slabPool->pageAlignment) == 0)) {
+	     (kboTmp->pageAlignment != 0 &&
+	      (kboTmp->pageAlignment % slabPool->pageAlignment) == 0))) {
 
 	    if (!kbo)
 		kbo = kboTmp;
