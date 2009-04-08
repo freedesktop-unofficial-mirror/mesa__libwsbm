@@ -131,6 +131,7 @@ pool_create(struct _WsbmBufferPool *pool,
     if (ret)
 	goto out_err1;
 
+    memset(&arg, 0, sizeof(arg));
     arg.req.size = size;
     arg.req.placement = placement;
     arg.req.page_alignment = alignment / pageSize;
@@ -178,6 +179,7 @@ pool_reference(struct _WsbmBufferPool *pool, unsigned handle)
     if (ret)
 	goto out_err1;
 
+    memset(&arg, 0, sizeof(arg));
     arg.req.handle = handle;
     ret = drmCommandWriteRead(pool->fd, ttmPool->devOffset + TTM_PL_REFERENCE,
 			      &arg, sizeof(arg));
@@ -216,6 +218,8 @@ pool_destroy(struct _WsbmBufStorage **buf)
 	(void)munmap(dBuf->virtual, dBuf->requestedSize);
 	dBuf->virtual = NULL;
     }
+
+    memset(&arg, 0, sizeof(arg));
     arg.handle = dBuf->kBuf.handle;
     (void)drmCommandWrite(dBuf->buf.pool->fd,
 			  ttmPool->devOffset + TTM_PL_UNREF,
@@ -263,6 +267,7 @@ syncforcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
 
 	WSBM_MUTEX_UNLOCK(&buf->mutex);
 
+	memset(&arg, 0, sizeof(arg));
 	arg.handle = dBuf->kBuf.handle;
 	arg.access_mode = kmode;
 	arg.op = TTM_PL_SYNCCPU_OP_GRAB;
@@ -303,6 +308,7 @@ releasefromcpu_locked(struct _WsbmBufStorage *buf, unsigned mode)
     if (kmode) {
 	struct ttm_pl_synccpu_arg arg;
 
+	memset(&arg, 0, sizeof(arg));
 	arg.handle = dBuf->kBuf.handle;
 	arg.access_mode = kmode;
 	arg.op = TTM_PL_SYNCCPU_OP_RELEASE;
@@ -420,6 +426,7 @@ pool_waitIdle(struct _WsbmBufStorage *buf, int lazy)
     struct _WsbmBufferPool *pool = buf->pool;
     int ret;
 
+    memset(&req, 0, sizeof(req));
     req.handle = dBuf->kBuf.handle;
     req.mode = (lazy) ? TTM_PL_WAITIDLE_MODE_LAZY : 0;
 
@@ -449,6 +456,7 @@ pool_setStatus(struct _WsbmBufStorage *buf, uint32_t set_placement,
     struct _WsbmBufferPool *pool = buf->pool;
     int ret;
 
+    memset(&arg, 0, sizeof(arg));
     req->handle = dBuf->kBuf.handle;
     req->set_placement = set_placement;
     req->clr_placement = clr_placement;

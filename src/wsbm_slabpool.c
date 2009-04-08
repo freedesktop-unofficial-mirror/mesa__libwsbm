@@ -241,6 +241,7 @@ wsbmFreeKernelBO(struct _WsbmSlabKernelBO *kbo)
 	return;
 
     slabPool = kbo->slabPool;
+    memset(&arg, 0, sizeof(arg));
     arg.handle = kbo->kBuf.handle;
     (void)munmap(kbo->virtual, kbo->actualSize);
     (void)drmCommandWrite(slabPool->pool.fd,
@@ -369,6 +370,7 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
 	    struct ttm_pl_setstatus_req *req = &arg.req;
 	    struct ttm_pl_rep *rep = &arg.rep;
 
+	    memset(&arg, 0, sizeof(arg));
 	    req->handle = kbo->kBuf.handle;
 	    req->set_placement = slabPool->proposedPlacement & new_mask;
 	    req->clr_placement = ~slabPool->proposedPlacement & new_mask;
@@ -401,6 +403,7 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
 	WSBMINITLISTHEAD(&kbo->head);
 	WSBMINITLISTHEAD(&kbo->timeoutHead);
 
+	memset(&arg, 0, sizeof(arg));
 	arg.req.size = size;
 	arg.req.placement = slabPool->proposedPlacement;
 	arg.req.page_alignment = slabPool->pageAlignment;
@@ -433,8 +436,10 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
 
   out_err1:
     {
-	struct ttm_pl_reference_req arg = {.handle = kbo->kBuf.handle };
+        struct ttm_pl_reference_req arg;
 
+	memset(&arg, 0, sizeof(arg));
+	arg.handle = kbo->kBuf.handle;
 	(void)drmCommandWrite(slabPool->pool.fd,
 			      slabPool->devOffset + TTM_PL_UNREF,
 			      &arg, sizeof(arg));
@@ -746,7 +751,7 @@ pool_create(struct _WsbmBufferPool *pool, unsigned long size,
     {
 	union ttm_pl_create_arg arg;
 
-	arg.req.size = size;
+	memset(&arg, 0, sizeof(arg));
 	arg.req.placement = placement;
 	arg.req.page_alignment = alignment / slabPool->pageSize;
 
@@ -776,6 +781,7 @@ pool_create(struct _WsbmBufferPool *pool, unsigned long size,
     {
 	struct ttm_pl_reference_req arg;
 
+	memset(&arg, 0, sizeof(arg));
 	arg.handle = sBuf->kBuf.handle;
 	(void)drmCommandWriteRead(pool->fd,
 				  slabPool->devOffset + TTM_PL_UNREF,
@@ -809,6 +815,7 @@ pool_destroy(struct _WsbmBufStorage **p_buf)
 	    sBuf->virtual = NULL;
 	}
 
+	memset(&arg, 0, sizeof(arg));
 	arg.handle = sBuf->kBuf.handle;
 	(void)drmCommandWrite(slabPool->pool.fd,
 			      slabPool->devOffset + TTM_PL_UNREF,
