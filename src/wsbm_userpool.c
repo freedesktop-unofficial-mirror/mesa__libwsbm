@@ -206,11 +206,15 @@ pool_create(struct _WsbmBufferPool *pool,
 {
     struct _WsbmUserPool *p = containerOf(pool, struct _WsbmUserPool, pool);
     struct _WsbmUserBuffer *vBuf = calloc(1, sizeof(*vBuf));
+    int ret;
 
     if (!vBuf)
 	return NULL;
 
-    wsbmBufStorageInit(&vBuf->buf, pool);
+    ret = wsbmBufStorageInit(&vBuf->buf, pool);
+    if (ret)
+	goto out_err;
+
     vBuf->sysmem = NULL;
     vBuf->proposedPlacement = placement;
     vBuf->size = size;
@@ -264,6 +268,7 @@ pool_create(struct _WsbmBufferPool *pool,
     if (vBuf->sysmem != NULL
 	|| (!(vBuf->kBuf.placement & WSBM_PL_FLAG_SYSTEM)))
 	return &vBuf->buf;
+
   out_err:
     free(vBuf);
     return NULL;
