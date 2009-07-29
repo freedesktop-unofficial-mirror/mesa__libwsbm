@@ -213,7 +213,11 @@ pool_create(struct _WsbmBufferPool *pool,
 
     ret = wsbmBufStorageInit(&vBuf->buf, pool);
     if (ret)
-	goto out_err;
+	goto out_err0;
+
+    ret = WSBM_COND_INIT(&vBuf->event);
+    if (ret)
+	goto out_err1;
 
     vBuf->sysmem = NULL;
     vBuf->proposedPlacement = placement;
@@ -255,7 +259,7 @@ pool_create(struct _WsbmBufferPool *pool,
     if ((placement & WSBM_PL_FLAG_NO_EVICT)
 	&& !(placement & WSBM_PL_FLAG_SYSTEM)) {
 	WSBM_MUTEX_UNLOCK(&p->mutex);
-	goto out_err;
+	goto out_err2;
     }
 
     vBuf->sysmem = malloc(size + WSBM_USER_ALIGN_ADD);
@@ -269,7 +273,11 @@ pool_create(struct _WsbmBufferPool *pool,
 	|| (!(vBuf->kBuf.placement & WSBM_PL_FLAG_SYSTEM)))
 	return &vBuf->buf;
 
-  out_err:
+  out_err2:
+    WSBM_COND_FREE(&vBuf->event);
+  out_err1:
+    wsbmBufStorageTakedown(&vBuf->buf);
+  out_err0:
     free(vBuf);
     return NULL;
 }
@@ -447,6 +455,8 @@ pool_destroy(struct _WsbmBufStorage **buf)
 	wsbmMMPutBlock(vBuf->node);
     else
 	free(vBuf->sysmem);
+
+    WSBM_COND_FREE(&vBuf->event);
 
     free(vBuf);
     return;
