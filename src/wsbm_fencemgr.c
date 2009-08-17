@@ -37,8 +37,6 @@
 #include "wsbm_fencemgr.h"
 #include "wsbm_pool.h"
 #include "wsbm_manager.h"
-#include <xf86drm.h>
-#include <ttm/ttm_fence_user.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -142,6 +140,7 @@ wsbmFenceMgrCreate(const struct _WsbmFenceMgrCreateInfo *info)
 	}
     }
     wsbmAtomicSet(&tmp->count, 0);
+    tmp->private = info->private;
 
     return tmp;
 
@@ -349,98 +348,6 @@ wsbmFenceCreate(struct _WsbmFenceMgr *mgr, uint32_t fence_class,
 			    private_size);
 }
 
-struct _WsbmTTMFenceMgrPriv
-{
-    int fd;
-    unsigned int devOffset;
-};
-
-static int
-tSignaled(struct _WsbmFenceMgr *mgr, void *private, uint32_t flush_type,
-	  uint32_t * signaled_type)
-{
-    struct _WsbmTTMFenceMgrPriv *priv =
-	(struct _WsbmTTMFenceMgrPriv *)mgr->private;
-    union ttm_fence_signaled_arg arg;
-    int ret;
-
-    arg.req.handle = (unsigned long)private;
-    arg.req.fence_type = flush_type;
-    arg.req.flush = 1;
-    *signaled_type = 0;
-
-    ret = drmCommandWriteRead(priv->fd, priv->devOffset + TTM_FENCE_SIGNALED,
-			      &arg, sizeof(arg));
-    if (ret)
-	return ret;
-
-    *signaled_type = arg.rep.signaled_types;
-    return 0;
-}
-
-static int
-tFinish(struct _WsbmFenceMgr *mgr, void *private, uint32_t fence_type,
-	int lazy_hint)
-{
-    struct _WsbmTTMFenceMgrPriv *priv =
-	(struct _WsbmTTMFenceMgrPriv *)mgr->private;
-    union ttm_fence_finish_arg arg =
-	{.req = {.handle = (unsigned long)private,
-		 .fence_type = fence_type,
-		 .mode = (lazy_hint) ? TTM_FENCE_FINISH_MODE_LAZY : 0}
-    };
-    int ret;
-
-    do {
-	ret = drmCommandWriteRead(priv->fd, priv->devOffset + TTM_FENCE_FINISH,
-				  &arg, sizeof(arg));
-    } while (ret == -EAGAIN || ret == -ERESTART);
-
-    return ret;
-}
-
-static int
-tUnref(struct _WsbmFenceMgr *mgr, void **private)
-{
-    struct _WsbmTTMFenceMgrPriv *priv =
-	(struct _WsbmTTMFenceMgrPriv *)mgr->private;
-    struct ttm_fence_unref_arg arg = {.handle = (unsigned long)*private };
-
-    *private = NULL;
-
-    return drmCommandWrite(priv->fd, priv->devOffset + TTM_FENCE_UNREF,
-			   &arg, sizeof(arg));
-}
-
-struct _WsbmFenceMgr *
-wsbmFenceMgrTTMInit(int fd, unsigned int numClass, unsigned int devOffset)
-{
-    struct _WsbmFenceMgrCreateInfo info;
-    struct _WsbmFenceMgr *mgr;
-    struct _WsbmTTMFenceMgrPriv *priv = malloc(sizeof(*priv));
-
-    if (!priv)
-	return NULL;
-
-    priv->fd = fd;
-    priv->devOffset = devOffset;
-
-    info.flags = WSBM_FENCE_CLASS_ORDERED;
-    info.num_classes = numClass;
-    info.signaled = tSignaled;
-    info.finish = tFinish;
-    info.unreference = tUnref;
-
-    mgr = wsbmFenceMgrCreate(&info);
-    if (mgr == NULL) {
-	free(priv);
-	return NULL;
-    }
-
-    mgr->private = (void *)priv;
-    return mgr;
-}
-
 void
 wsbmFenceCmdLock(struct _WsbmFenceMgr *mgr, uint32_t fence_class)
 {
@@ -454,21 +361,24 @@ wsbmFenceCmdUnlock(struct _WsbmFenceMgr *mgr, uint32_t fence_class)
 }
 
 void
-wsbmFenceMgrTTMTakedown(struct _WsbmFenceMgr *mgr)
+wsbmFenceMgrTakedown(struct _WsbmFenceMgr *mgr)
 {
     int i;
 
     if (!mgr)
 	return;
 
-    if (mgr->private)
-	free(mgr->private);
-
     for (i = 0; i < mgr->info.num_classes; ++i) {
 	WSBM_MUTEX_FREE(&mgr->classes[i].mutex);
 	WSBM_MUTEX_FREE(&mgr->classes[i].cmd_mutex);
     }
+    free(mgr->classes);
     free(mgr);
+}
 
-    return;
+extern void *wsbmFenceMgrPrivate(struct _WsbmFenceMgr *mgr)
+{
+    if (!mgr)
+	return NULL;
+    return mgr->private;
 }

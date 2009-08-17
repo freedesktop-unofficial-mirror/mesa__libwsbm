@@ -87,9 +87,9 @@ extern struct _WsbmThreadFuncs *wsbmCurThreadFunc;
 #define WSBM_COND_BROADCAST(_cond)		\
     (_cond)->func->condBroadcast(_cond);
 
-struct _WsbmVNodeFuncs
+struct _WsbmDriver
 {
-    struct _ValidateNode *(*alloc) (struct _WsbmVNodeFuncs *, int);
+    struct _ValidateNode *(*alloc) (const struct _WsbmDriver *);
     void (*free) (struct _ValidateNode *);
     void (*clear) (struct _ValidateNode *);
 };
@@ -109,7 +109,7 @@ struct _ValidateNode
     uint64_t set_flags;
     uint64_t clr_flags;
     void *buf;
-    struct _WsbmVNodeFuncs *func;
+    const struct _WsbmDriver *driver;
 };
 
 static inline struct _WsbmVNodeFuncs *

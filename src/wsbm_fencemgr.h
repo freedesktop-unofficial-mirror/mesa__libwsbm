@@ -136,6 +136,7 @@ extern uint32_t wsbmFenceType(struct _WsbmFenceObject *fence);
 
 struct _WsbmFenceMgrCreateInfo
 {
+    void *private;
     uint32_t flags;
     uint32_t num_classes;
     int (*signaled) (struct _WsbmFenceMgr * mgr, void *private,
@@ -151,12 +152,6 @@ extern struct _WsbmFenceMgr *wsbmFenceMgrCreate(const struct
 extern void wsbmFenceCmdLock(struct _WsbmFenceMgr *mgr, uint32_t fence_class);
 extern void wsbmFenceCmdUnlock(struct _WsbmFenceMgr *mgr,
 			       uint32_t fence_class);
-/*
- * Builtin drivers.
- */
-
-extern struct _WsbmFenceMgr *wsbmFenceMgrTTMInit(int fd,
-						 unsigned int numClass,
-						 unsigned int devOffset);
-extern void wsbmFenceMgrTTMTakedown(struct _WsbmFenceMgr *mgr);
+extern void wsbmFenceMgrTakedown(struct _WsbmFenceMgr *mgr);
+extern void *wsbmFenceMgrPrivate(struct _WsbmFenceMgr *mgr);
 #endif

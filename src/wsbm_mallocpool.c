@@ -54,7 +54,8 @@ mallocBuf(struct _WsbmBufStorage *buf)
 
 static struct _WsbmBufStorage *
 pool_create(struct _WsbmBufferPool *pool,
-	    unsigned long size, uint32_t placement, unsigned alignment)
+	    unsigned long size, uint32_t placement, unsigned alignment,
+	    int share, int pin)
 {
     struct _WsbmMallocBuffer *mBuf = malloc(size + sizeof(*mBuf) + 16);
 
@@ -64,8 +65,6 @@ pool_create(struct _WsbmBufferPool *pool,
     wsbmBufStorageInit(&mBuf->buf, pool);
     mBuf->size = size;
     mBuf->mem = (void *)((unsigned long)mBuf + sizeof(*mBuf));
-    if ((placement & WSBM_PL_MASK_MEM) != WSBM_PL_FLAG_SYSTEM)
-	abort();
 
     return &mBuf->buf;
 }
@@ -97,7 +96,7 @@ pool_unmap(struct _WsbmBufStorage *buf)
 }
 
 static int
-pool_syncforcpu(struct _WsbmBufStorage *buf, unsigned mode)
+pool_syncforcpu(struct _WsbmBufStorage *buf, unsigned mode, int noBlock)
 {
     return 0;
 }
@@ -130,7 +129,7 @@ pool_poolOffset(struct _WsbmBufStorage *buf)
 static uint32_t
 pool_placement(struct _WsbmBufStorage *buf)
 {
-    return WSBM_PL_FLAG_SYSTEM | WSBM_PL_FLAG_CACHED;
+    return 0;
 }
 
 static unsigned long

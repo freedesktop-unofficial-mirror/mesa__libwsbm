@@ -59,6 +59,7 @@ struct _WsbmUserBuffer
 {
     struct _WsbmBufStorage buf;
     struct _WsbmKernelBuf kBuf;
+    
 
     /* Protected by the pool mutex */
 
@@ -102,7 +103,11 @@ struct _WsbmUserPool
     struct _WsbmListHead agpLRU;
     struct _WsbmMM vramMM;
     struct _WsbmMM agpMM;
-        uint32_t(*fenceTypes) (uint64_t);
+    uint32_t(*fenceTypes) (uint64_t);
+    uint32_t system_flag;
+    uint32_t vram_flag;
+    uint32_t agp_flag;
+    uint32_t mem_mask;
 };
 
 static inline struct _WsbmUserPool *
@@ -187,7 +192,7 @@ evict_lru(struct _WsbmListHead *lru)
 
     memcpy(WSBM_USER_ALIGN_SYSMEM(vBuf->sysmem), vBuf->map, vBuf->size);
     WSBMLISTDELINIT(&vBuf->lru);
-    vBuf->kBuf.placement = WSBM_PL_FLAG_SYSTEM;
+    vBuf->kBuf.placement = p->system_flag;
     vBuf->map = WSBM_USER_ALIGN_SYSMEM(vBuf->sysmem);
 
     /*
@@ -202,23 +207,16 @@ evict_lru(struct _WsbmListHead *lru)
 
 static struct _WsbmBufStorage *
 pool_create(struct _WsbmBufferPool *pool,
-	    unsigned long size, uint32_t placement, unsigned alignment)
+	    unsigned long size, uint32_t placement, unsigned alignment,
+	    int share, int pin)
 {
     struct _WsbmUserPool *p = containerOf(pool, struct _WsbmUserPool, pool);
     struct _WsbmUserBuffer *vBuf = calloc(1, sizeof(*vBuf));
-    int ret;
 
     if (!vBuf)
 	return NULL;
 
-    ret = wsbmBufStorageInit(&vBuf->buf, pool);
-    if (ret)
-	goto out_err0;
-
-    ret = WSBM_COND_INIT(&vBuf->event);
-    if (ret)
-	goto out_err1;
-
+    wsbmBufStorageInit(&vBuf->buf, pool);
     vBuf->sysmem = NULL;
     vBuf->proposedPlacement = placement;
     vBuf->size = size;
@@ -228,13 +226,13 @@ pool_create(struct _WsbmBufferPool *pool,
     WSBMINITLISTHEAD(&vBuf->delayed);
     WSBM_MUTEX_LOCK(&p->mutex);
 
-    if (placement & WSBM_PL_FLAG_TT) {
+    if (placement & p->agp_flag) {
 	vBuf->node = wsbmMMSearchFree(&p->agpMM, size, alignment, 1);
 	if (vBuf->node)
 	    vBuf->node = wsbmMMGetBlock(vBuf->node, size, alignment);
 
 	if (vBuf->node) {
-	    vBuf->kBuf.placement = WSBM_PL_FLAG_TT;
+	    vBuf->kBuf.placement = p->agp_flag;
 	    vBuf->kBuf.gpuOffset = p->agpOffset + vBuf->node->start;
 	    vBuf->map = (void *)(p->agpMap + vBuf->node->start);
 	    WSBMLISTADDTAIL(&vBuf->lru, &p->agpLRU);
@@ -242,13 +240,13 @@ pool_create(struct _WsbmBufferPool *pool,
 	}
     }
 
-    if (placement & WSBM_PL_FLAG_VRAM) {
+    if (placement & p->vram_flag) {
 	vBuf->node = wsbmMMSearchFree(&p->vramMM, size, alignment, 1);
 	if (vBuf->node)
 	    vBuf->node = wsbmMMGetBlock(vBuf->node, size, alignment);
 
 	if (vBuf->node) {
-	    vBuf->kBuf.placement = WSBM_PL_FLAG_VRAM;
+	    vBuf->kBuf.placement = p->vram_flag;
 	    vBuf->kBuf.gpuOffset = p->vramOffset + vBuf->node->start;
 	    vBuf->map = (void *)(p->vramMap + vBuf->node->start);
 	    WSBMLISTADDTAIL(&vBuf->lru, &p->vramLRU);
@@ -256,28 +254,22 @@ pool_create(struct _WsbmBufferPool *pool,
 	}
     }
 
-    if ((placement & WSBM_PL_FLAG_NO_EVICT)
-	&& !(placement & WSBM_PL_FLAG_SYSTEM)) {
+    if (pin && !(placement & p->system_flag)) {
 	WSBM_MUTEX_UNLOCK(&p->mutex);
-	goto out_err2;
+	goto out_err;
     }
 
     vBuf->sysmem = malloc(size + WSBM_USER_ALIGN_ADD);
-    vBuf->kBuf.placement = WSBM_PL_FLAG_SYSTEM;
+    vBuf->kBuf.placement = p->system_flag;
     vBuf->map = WSBM_USER_ALIGN_SYSMEM(vBuf->sysmem);
 
   have_mem:
 
     WSBM_MUTEX_UNLOCK(&p->mutex);
     if (vBuf->sysmem != NULL
-	|| (!(vBuf->kBuf.placement & WSBM_PL_FLAG_SYSTEM)))
+	|| (!(vBuf->kBuf.placement & p->system_flag)))
 	return &vBuf->buf;
-
-  out_err2:
-    WSBM_COND_FREE(&vBuf->event);
-  out_err1:
-    wsbmBufStorageTakedown(&vBuf->buf);
-  out_err0:
+  out_err:
     free(vBuf);
     return NULL;
 }
@@ -303,8 +295,10 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
     vBuf->proposedPlacement =
 	(vBuf->proposedPlacement | set_flags) & ~clr_flags;
 
-    if ((vBuf->proposedPlacement & vBuf->kBuf.placement & WSBM_PL_MASK_MEM) ==
-	vBuf->kBuf.placement) {
+    if ((vBuf->proposedPlacement & vBuf->kBuf.placement & p->mem_mask) ==
+	vBuf->kBuf.placement &&
+	(vBuf->alignment == 0 || 
+	 (vBuf->kBuf.gpuOffset % vBuf->alignment == 0))) {
 	err = 0;
 	goto have_mem;
     }
@@ -314,7 +308,7 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
      * do a sw copy to the other region.
      */
 
-    if (!(vBuf->kBuf.placement & WSBM_PL_FLAG_SYSTEM)) {
+    if (!(vBuf->kBuf.placement & p->system_flag)) {
 	struct _WsbmListHead tmpLRU;
 
 	WSBMINITLISTHEAD(&tmpLRU);
@@ -324,7 +318,7 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 	    goto have_mem;
     }
 
-    if (vBuf->proposedPlacement & WSBM_PL_FLAG_TT) {
+    if (vBuf->proposedPlacement & p->agp_flag) {
 	do {
 	    vBuf->node =
 		wsbmMMSearchFree(&p->agpMM, vBuf->size, vBuf->alignment, 1);
@@ -333,7 +327,7 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 		    wsbmMMGetBlock(vBuf->node, vBuf->size, vBuf->alignment);
 
 	    if (vBuf->node) {
-		vBuf->kBuf.placement = WSBM_PL_FLAG_TT;
+		vBuf->kBuf.placement = p->agp_flag;
 		vBuf->kBuf.gpuOffset = p->agpOffset + vBuf->node->start;
 		vBuf->map = (void *)(p->agpMap + vBuf->node->start);
 		memcpy(vBuf->map, WSBM_USER_ALIGN_SYSMEM(vBuf->sysmem),
@@ -344,7 +338,7 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 	} while (evict_lru(&p->agpLRU) == 0);
     }
 
-    if (vBuf->proposedPlacement & WSBM_PL_FLAG_VRAM) {
+    if (vBuf->proposedPlacement & p->vram_flag) {
 	do {
 	    vBuf->node =
 		wsbmMMSearchFree(&p->vramMM, vBuf->size, vBuf->alignment, 1);
@@ -353,7 +347,7 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 		    wsbmMMGetBlock(vBuf->node, vBuf->size, vBuf->alignment);
 
 	    if (!err) {
-		vBuf->kBuf.placement = WSBM_PL_FLAG_VRAM;
+		vBuf->kBuf.placement = p->vram_flag;
 		vBuf->kBuf.gpuOffset = p->vramOffset + vBuf->node->start;
 		vBuf->map = (void *)(p->vramMap + vBuf->node->start);
 		memcpy(vBuf->map, WSBM_USER_ALIGN_SYSMEM(vBuf->sysmem),
@@ -364,7 +358,7 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 	} while (evict_lru(&p->vramLRU) == 0);
     }
 
-    if (vBuf->proposedPlacement & WSBM_PL_FLAG_SYSTEM)
+    if (vBuf->proposedPlacement & p->system_flag)
 	goto have_mem;
 
     err = -ENOMEM;
@@ -377,13 +371,17 @@ pool_validate(struct _WsbmBufStorage *buf, uint64_t set_flags,
 }
 
 static int
-pool_setStatus(struct _WsbmBufStorage *buf,
-	       uint32_t set_placement, uint32_t clr_placement)
+pool_setAttr(struct _WsbmBufStorage *buf,
+	     uint32_t placement,
+	     unsigned alignment,
+	     int share,
+	     int pin)
 {
     struct _WsbmUserBuffer *vBuf = userBuf(buf);
     int ret;
 
-    ret = pool_validate(buf, set_placement, clr_placement);
+    vBuf->alignment = alignment;
+    ret = pool_validate(buf, placement, ~placement);
     vBuf->unFenced = 0;
     return ret;
 }
@@ -413,7 +411,7 @@ release_delayed_buffers(struct _WsbmUserPool *p)
 	    WSBMLISTDEL(&vBuf->delayed);
 	    WSBMLISTDEL(&vBuf->lru);
 
-	    if ((vBuf->kBuf.placement & WSBM_PL_FLAG_SYSTEM) == 0)
+	    if ((vBuf->kBuf.placement & p->system_flag) == 0)
 		wsbmMMPutBlock(vBuf->node);
 	    else
 		free(vBuf->sysmem);
@@ -451,12 +449,10 @@ pool_destroy(struct _WsbmBufStorage **buf)
     WSBMLISTDEL(&vBuf->lru);
     WSBM_MUTEX_UNLOCK(&p->mutex);
 
-    if (!(vBuf->kBuf.placement & WSBM_PL_FLAG_SYSTEM))
+    if (!(vBuf->kBuf.placement & p->system_flag))
 	wsbmMMPutBlock(vBuf->node);
     else
 	free(vBuf->sysmem);
-
-    WSBM_COND_FREE(&vBuf->event);
 
     free(vBuf);
     return;
@@ -488,13 +484,14 @@ pool_releaseFromCpu(struct _WsbmBufStorage *buf, unsigned mode)
 }
 
 static int
-pool_syncForCpu(struct _WsbmBufStorage *buf, unsigned mode)
+pool_syncForCpu(struct _WsbmBufStorage *buf, unsigned mode,
+		int noBlock)
 {
     struct _WsbmUserBuffer *vBuf = userBuf(buf);
     int ret = 0;
 
     WSBM_MUTEX_LOCK(&buf->mutex);
-    if ((mode & WSBM_SYNCCPU_DONT_BLOCK)) {
+    if (noBlock) {
 
 	if (vBuf->unFenced) {
 	    ret = -EBUSY;
@@ -553,9 +550,9 @@ pool_fence(struct _WsbmBufStorage *buf, struct _WsbmFenceObject *fence)
 
     WSBM_COND_BROADCAST(&vBuf->event);
     WSBM_MUTEX_LOCK(&p->mutex);
-    if (vBuf->kBuf.placement & WSBM_PL_FLAG_VRAM)
+    if (vBuf->kBuf.placement & p->vram_flag)
 	WSBMLISTADDTAIL(&vBuf->lru, &p->vramLRU);
-    else if (vBuf->kBuf.placement & WSBM_PL_FLAG_TT)
+    else if (vBuf->kBuf.placement & p->agp_flag)
 	WSBMLISTADDTAIL(&vBuf->lru, &p->agpLRU);
     WSBM_MUTEX_UNLOCK(&p->mutex);
     WSBM_MUTEX_UNLOCK(&buf->mutex);
@@ -575,9 +572,9 @@ pool_unvalidate(struct _WsbmBufStorage *buf)
     vBuf->unFenced = 0;
     WSBM_COND_BROADCAST(&vBuf->event);
     WSBM_MUTEX_LOCK(&p->mutex);
-    if (vBuf->kBuf.placement & WSBM_PL_FLAG_VRAM)
+    if (vBuf->kBuf.placement & p->vram_flag)
 	WSBMLISTADDTAIL(&vBuf->lru, &p->vramLRU);
-    else if (vBuf->kBuf.placement & WSBM_PL_FLAG_TT)
+    else if (vBuf->kBuf.placement & p->agp_flag)
 	WSBMLISTADDTAIL(&vBuf->lru, &p->agpLRU);
     WSBM_MUTEX_UNLOCK(&p->mutex);
 
@@ -641,6 +638,9 @@ wsbmUserPoolInit(void *vramAddr,
 		 unsigned long vramStart, unsigned long vramSize,
 		 void *agpAddr, unsigned long agpStart,
 		 unsigned long agpSize,
+		 uint32_t system_flag,
+		 uint32_t vram_flag,
+		 uint32_t agp_flag,
 		 uint32_t(*fenceTypes) (uint64_t set_flags))
 {
     struct _WsbmBufferPool *pool;
@@ -672,6 +672,10 @@ wsbmUserPoolInit(void *vramAddr,
     uPool->vramOffset = vramStart;
     uPool->vramMap = (unsigned long)vramAddr;
     uPool->fenceTypes = fenceTypes;
+    uPool->system_flag = system_flag;
+    uPool->vram_flag = vram_flag;
+    uPool->agp_flag = agp_flag;
+    uPool->mem_mask = uPool->system_flag | uPool->vram_flag | uPool->agp_flag;
 
     pool = &uPool->pool;
     pool->map = &pool_map;
@@ -687,7 +691,7 @@ wsbmUserPoolInit(void *vramAddr,
     pool->validate = &pool_validate;
     pool->waitIdle = &pool_waitIdle;
     pool->takeDown = &pool_takedown;
-    pool->setStatus = &pool_setStatus;
+    pool->setAttr = &pool_setAttr;
     pool->syncforcpu = &pool_syncForCpu;
     pool->releasefromcpu = &pool_releaseFromCpu;
 

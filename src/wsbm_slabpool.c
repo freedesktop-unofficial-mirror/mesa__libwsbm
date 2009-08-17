@@ -34,7 +34,6 @@
 #include "config.h"
 #endif
 
-#include <ttm/ttm_placement_user.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <errno.h>
@@ -42,23 +41,12 @@
 #include <assert.h>
 #include <string.h>
 #include <sys/mman.h>
-#include <xf86drm.h>
 #include "wsbm_pool.h"
 #include "wsbm_fencemgr.h"
 #include "wsbm_priv.h"
 #include "wsbm_manager.h"
 
 #define WSBM_SLABPOOL_ALLOC_RETRIES 100
-#define DRMRESTARTCOMMANDWRITE(_fd, _val, _arg, _ret)			\
-	do {								\
-		(_ret) = drmCommandWrite(_fd, _val, &(_arg), sizeof(_arg)); \
-	} while ((_ret) == -EAGAIN || (_ret) == -ERESTART);		\
-
-#define DRMRESTARTCOMMANDWRITEREAD(_fd, _val, _arg, _ret)		\
-	do {								\
-		(_ret) = drmCommandWriteRead(_fd, _val, &(_arg), sizeof(_arg)); \
-	} while ((_ret) == -EAGAIN || (_ret) == -ERESTART);		\
-
 
 #ifdef DEBUG_FENCESIGNALED
 static int createbuffer = 0;
@@ -69,7 +57,6 @@ struct _WsbmSlab;
 
 struct _WsbmSlabBuffer
 {
-    struct _WsbmKernelBuf kBuf;
     struct _WsbmBufStorage storage;
     struct _WsbmCond event;
 
@@ -78,11 +65,11 @@ struct _WsbmSlabBuffer
      */
 
     int isSlabBuffer;
+    struct _WsbmBufStorage *bStorage;
     struct _WsbmSlab *parent;
     uint32_t start;
     void *virtual;
     unsigned long requestedSize;
-    uint64_t mapHandle;
 
     /*
      * Protected by struct _WsbmSlabSizeHeader::mutex
@@ -108,21 +95,20 @@ struct _WsbmSlabKernelBO
      * Constant at creation
      */
 
-    struct _WsbmKernelBuf kBuf;
+    struct _WsbmBufStorage *bStorage;
     uint32_t pageAlignment;
     void *virtual;
-    unsigned long actualSize;
-    uint64_t mapHandle;
 
     /*
      * Protected by struct _WsbmSlabCache::mutex
      */
 
     struct _WsbmSlabPool *slabPool;
-    uint32_t proposedPlacement;
+    struct _WsbmAttr attr;
     struct _WsbmListHead timeoutHead;
     struct _WsbmListHead head;
     struct timeval timeFreed;
+    unsigned long actual_size;
 };
 
 struct _WsbmSlab
@@ -169,16 +155,15 @@ struct _WsbmSlabCache
 struct _WsbmSlabPool
 {
     struct _WsbmBufferPool pool;
+    struct _WsbmBufferPool *basePool;
 
     /*
      * The data of this structure remains constant after
      * initialization and thus needs no mutex protection.
      */
 
-    unsigned int devOffset;
     struct _WsbmSlabCache *cache;
-    uint32_t proposedPlacement;
-    uint32_t validMask;
+    struct _WsbmAttr attr;
     uint32_t *bucketSizes;
     uint32_t numBuckets;
     uint32_t pageSize;
@@ -234,19 +219,10 @@ wsbmTimeAdd(struct timeval *arg, struct timeval *add)
 static void
 wsbmFreeKernelBO(struct _WsbmSlabKernelBO *kbo)
 {
-    struct ttm_pl_reference_req arg;
-    struct _WsbmSlabPool *slabPool;
-
     if (!kbo)
 	return;
 
-    slabPool = kbo->slabPool;
-    memset(&arg, 0, sizeof(arg));
-    arg.handle = kbo->kBuf.handle;
-    (void)munmap(kbo->virtual, kbo->actualSize);
-    (void)drmCommandWrite(slabPool->pool.fd,
-			  slabPool->devOffset + TTM_PL_UNREF, &arg,
-			  sizeof(arg));
+    kbo->bStorage->pool->destroy(&kbo->bStorage);
     free(kbo);
 }
 
@@ -293,15 +269,22 @@ wsbmSetKernelBOFree(struct _WsbmSlabCache *cache,
     wsbmTimeAdd(&timeFreed, &cache->slabTimeout);
     kbo->timeFreed = timeFreed;
 
-    if (kbo->kBuf.placement & TTM_PL_FLAG_CACHED)
-	WSBMLISTADD(&kbo->head, &cache->cached);
-    else
-	WSBMLISTADD(&kbo->head, &cache->unCached);
-
+    WSBMLISTADD(&kbo->head, &cache->unCached);
     WSBMLISTADDTAIL(&kbo->timeoutHead, &cache->timeoutList);
     wsbmFreeTimeoutKBOsLocked(cache, &time);
 
     WSBM_MUTEX_UNLOCK(&cache->mutex);
+}
+
+static inline int
+wsbmAttrDiff(const struct _WsbmAttr *attr1,
+	     const struct _WsbmAttr *attr2)
+{
+    return (attr1->setPlacement != attr2->setPlacement) ||
+	(attr1->clrPlacement != attr2->clrPlacement) ||
+	(attr1->alignment != attr2->alignment) ||
+	(attr1->share != attr2->share) ||
+	(attr1->pin != attr2->pin);
 }
 
 /*
@@ -317,7 +300,7 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
     uint32_t size = header->bufSize * slabPool->desiredNumBuffers;
     struct _WsbmSlabKernelBO *kbo;
     struct _WsbmSlabKernelBO *kboTmp;
-    int ret;
+    int ret = 0;
 
     /*
      * FIXME: We should perhaps allow some variation in slabsize in order
@@ -333,13 +316,12 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
     kbo = NULL;
 
   retry:
-    head = (slabPool->proposedPlacement & TTM_PL_FLAG_CACHED) ?
-	&cache->cached : &cache->unCached;
+    head = &cache->unCached;
 
     WSBMLISTFOREACH(list, head) {
 	kboTmp = WSBMLISTENTRY(list, struct _WsbmSlabKernelBO, head);
 
-	if ((kboTmp->actualSize == size) &&
+	if ((kboTmp->actual_size == size) &&
 	    (slabPool->pageAlignment == 0 ||
 	     (kboTmp->pageAlignment != 0 &&
 	      (kboTmp->pageAlignment % slabPool->pageAlignment) == 0))) {
@@ -347,9 +329,8 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
 	    if (!kbo)
 		kbo = kboTmp;
 
-	    if ((kbo->proposedPlacement ^ slabPool->proposedPlacement) == 0)
+	    if (!wsbmAttrDiff(&kbo->attr, &slabPool->attr)) 
 		break;
-
 	}
     }
 
@@ -361,27 +342,15 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
     WSBM_MUTEX_UNLOCK(&cache->mutex);
 
     if (kbo) {
-	uint32_t new_mask =
-	    kbo->proposedPlacement ^ slabPool->proposedPlacement;
-
-	ret = 0;
-	if (new_mask) {
-	    union ttm_pl_setstatus_arg arg;
-	    struct ttm_pl_setstatus_req *req = &arg.req;
-	    struct ttm_pl_rep *rep = &arg.rep;
-
-	    memset(&arg, 0, sizeof(arg));
-	    req->handle = kbo->kBuf.handle;
-	    req->set_placement = slabPool->proposedPlacement & new_mask;
-	    req->clr_placement = ~slabPool->proposedPlacement & new_mask;
-	    DRMRESTARTCOMMANDWRITEREAD(slabPool->pool.fd,
-				       slabPool->devOffset + TTM_PL_SETSTATUS,
-				       arg, ret);
-	    if (ret == 0) {
-		kbo->kBuf.gpuOffset = rep->gpu_offset;
-		kbo->kBuf.placement = rep->placement;
-	    }
-	    kbo->proposedPlacement = slabPool->proposedPlacement;
+	if (wsbmAttrDiff(&kbo->attr, &slabPool->attr)) {
+	    struct _WsbmBufStorage *storage = kbo->bStorage;
+	    struct _WsbmAttr *attr = &slabPool->attr;
+	    ret = storage->pool->setAttr(storage,
+					 attr->setPlacement,
+					 attr->alignment,
+					 attr->share,
+					 attr->pin);
+	    kbo->attr = slabPool->attr;
 	}
 
 	if (ret == 0)
@@ -397,53 +366,37 @@ wsbmAllocKernelBO(struct _WsbmSlabSizeHeader *header)
 	return NULL;
 
     {
-	union ttm_pl_create_arg arg;
+	size_t actual_size = 
+	    (size + slabPool->pageSize - 1) & ~(slabPool->pageSize - 1);
+	const struct _WsbmAttr *attr = &slabPool->attr;
 
 	kbo->slabPool = slabPool;
 	WSBMINITLISTHEAD(&kbo->head);
 	WSBMINITLISTHEAD(&kbo->timeoutHead);
-
-	memset(&arg, 0, sizeof(arg));
-	arg.req.size = size;
-	arg.req.placement = slabPool->proposedPlacement;
-	arg.req.page_alignment = slabPool->pageAlignment;
-
-	DRMRESTARTCOMMANDWRITEREAD(slabPool->pool.fd,
-				   slabPool->devOffset + TTM_PL_CREATE,
-				   arg, ret);
+	kbo->bStorage = slabPool->basePool->create(slabPool->basePool,
+						   actual_size,
+						   attr->setPlacement,
+						   attr->alignment,
+						   attr->share,
+						   attr->pin);
 	if (ret)
 	    goto out_err0;
 
-	kbo->kBuf.gpuOffset = arg.rep.gpu_offset;
-	kbo->kBuf.placement = arg.rep.placement;
-	kbo->kBuf.handle = arg.rep.handle;
-
-	kbo->actualSize = arg.rep.bo_size;
-	kbo->mapHandle = arg.rep.map_handle;
-	kbo->proposedPlacement = slabPool->proposedPlacement;
+	kbo->attr = slabPool->attr;
+	kbo->actual_size = actual_size;
     }
 
-    kbo->virtual = mmap(0, kbo->actualSize,
-			PROT_READ | PROT_WRITE, MAP_SHARED,
-			slabPool->pool.fd, kbo->mapHandle);
+    ret = kbo->bStorage->pool->map(kbo->bStorage, 
+				   WSBM_ACCESS_READ |
+				   WSBM_ACCESS_WRITE, &kbo->virtual);
 
-    if (kbo->virtual == MAP_FAILED) {
-	ret = -errno;
+    if (ret)
 	goto out_err1;
-    }
 
     return kbo;
 
   out_err1:
-    {
-        struct ttm_pl_reference_req arg;
-
-	memset(&arg, 0, sizeof(arg));
-	arg.handle = kbo->kBuf.handle;
-	(void)drmCommandWrite(slabPool->pool.fd,
-			      slabPool->devOffset + TTM_PL_UNREF,
-			      &arg, sizeof(arg));
-    }
+    kbo->bStorage->pool->destroy(&kbo->bStorage);
   out_err0:
     free(kbo);
     return NULL;
@@ -468,7 +421,7 @@ wsbmAllocSlab(struct _WsbmSlabSizeHeader *header)
 	goto out_err0;
     }
 
-    numBuffers = slab->kbo->actualSize / header->bufSize;
+    numBuffers = slab->kbo->actual_size / header->bufSize;
 
     slab->buffers = calloc(numBuffers, sizeof(*slab->buffers));
     if (!slab->buffers) {
@@ -697,7 +650,8 @@ wsbmSlabAllocBuffer(struct _WsbmSlabSizeHeader *header)
 
 static struct _WsbmBufStorage *
 pool_create(struct _WsbmBufferPool *pool, unsigned long size,
-	    uint32_t placement, unsigned alignment)
+	    uint32_t placement, unsigned alignment,
+	    int share, int pin)
 {
     struct _WsbmSlabPool *slabPool = slabPoolFromPool(pool);
     struct _WsbmSlabSizeHeader *header;
@@ -749,44 +703,31 @@ pool_create(struct _WsbmBufferPool *pool, unsigned long size,
 	goto out_err1;
 
     {
-	union ttm_pl_create_arg arg;
+	sBuf->bStorage = slabPool->basePool->create(slabPool->basePool,
+						    size,
+						    placement,
+						    alignment,
+						    share,
+						    pin);
 
-	memset(&arg, 0, sizeof(arg));
-	arg.req.placement = placement;
-	arg.req.page_alignment = alignment / slabPool->pageSize;
-
-	DRMRESTARTCOMMANDWRITEREAD(pool->fd,
-				   slabPool->devOffset + TTM_PL_CREATE,
-				   arg, ret);
-
-	if (ret)
+	if (!sBuf->bStorage) {
+	    ret = -ENOMEM;
 	    goto out_err2;
+	}
 
-	sBuf->kBuf.gpuOffset = arg.rep.gpu_offset;
-	sBuf->kBuf.placement = arg.rep.placement;
-	sBuf->kBuf.handle = arg.rep.handle;
-	sBuf->mapHandle = arg.rep.map_handle;
 	sBuf->requestedSize = size;
+	ret = sBuf->bStorage->pool->map(sBuf->bStorage, 
+					WSBM_ACCESS_READ |
+					WSBM_ACCESS_WRITE, &sBuf->virtual);
 
-	sBuf->virtual = mmap(0, size, PROT_READ | PROT_WRITE, MAP_SHARED,
-			     pool->fd, sBuf->mapHandle);
-
-	if (sBuf->virtual == MAP_FAILED)
+	if (ret != 0)
 	    goto out_err3;
     }
 
     wsbmAtomicSet(&sBuf->writers, 0);
     return &sBuf->storage;
   out_err3:
-    {
-	struct ttm_pl_reference_req arg;
-
-	memset(&arg, 0, sizeof(arg));
-	arg.handle = sBuf->kBuf.handle;
-	(void)drmCommandWriteRead(pool->fd,
-				  slabPool->devOffset + TTM_PL_UNREF,
-				  &arg, sizeof(arg));
-    }
+    sBuf->bStorage->pool->destroy(&sBuf->bStorage);
   out_err2:
     WSBM_COND_FREE(&sBuf->event);
   out_err1:
@@ -807,20 +748,12 @@ pool_destroy(struct _WsbmBufStorage **p_buf)
     *p_buf = NULL;
 
     if (!sBuf->isSlabBuffer) {
-	struct _WsbmSlabPool *slabPool = slabPoolFromBuf(sBuf);
-	struct ttm_pl_reference_req arg;
-
 	if (sBuf->virtual != NULL) {
-	    (void)munmap(sBuf->virtual, sBuf->requestedSize);
+	    sBuf->bStorage->pool->unmap(sBuf->bStorage);
 	    sBuf->virtual = NULL;
 	}
 
-	memset(&arg, 0, sizeof(arg));
-	arg.handle = sBuf->kBuf.handle;
-	(void)drmCommandWrite(slabPool->pool.fd,
-			      slabPool->devOffset + TTM_PL_UNREF,
-			      &arg, sizeof(arg));
-
+	sBuf->bStorage->pool->destroy(&sBuf->bStorage);
 	WSBM_COND_FREE(&sBuf->event);
 	wsbmBufStorageTakedown(&sBuf->storage);
 	free(sBuf);
@@ -912,13 +845,14 @@ pool_releaseFromCpu(struct _WsbmBufStorage *buf, unsigned mode)
 }
 
 static int
-pool_syncForCpu(struct _WsbmBufStorage *buf, unsigned mode)
+pool_syncForCpu(struct _WsbmBufStorage *buf, unsigned mode,
+		int noBlock)
 {
     struct _WsbmSlabBuffer *sBuf = slabBuffer(buf);
     int ret = 0;
 
     WSBM_MUTEX_LOCK(&buf->mutex);
-    if ((mode & WSBM_SYNCCPU_DONT_BLOCK)) {
+    if (noBlock) {
 	int signaled;
 
 	if (sBuf->unFenced) {
@@ -977,8 +911,9 @@ static struct _WsbmKernelBuf *
 pool_kernel(struct _WsbmBufStorage *buf)
 {
     struct _WsbmSlabBuffer *sBuf = slabBuffer(buf);
-
-    return (sBuf->isSlabBuffer) ? &sBuf->parent->kbo->kBuf : &sBuf->kBuf;
+    struct _WsbmBufStorage *bStorage =
+	(sBuf->isSlabBuffer) ? sBuf->parent->kbo->bStorage : sBuf->bStorage;
+    return bStorage->pool->kernel(bStorage);
 }
 
 static unsigned long
@@ -1146,14 +1081,13 @@ pool_takedown(struct _WsbmBufferPool *pool)
 
 struct _WsbmBufferPool *
 wsbmSlabPoolInit(int fd,
-		 uint32_t devOffset,
-		 uint32_t placement,
-		 uint32_t validMask,
+		 struct _WsbmBufferPool *basePool,
+		 const struct _WsbmAttr *attr,
 		 uint32_t smallestSize,
 		 uint32_t numSizes,
 		 uint32_t desiredNumBuffers,
 		 uint32_t maxSlabSize,
-		 uint32_t pageAlignment, struct _WsbmSlabCache *cache)
+		 struct _WsbmSlabCache *cache)
 {
     struct _WsbmBufferPool *pool;
     struct _WsbmSlabPool *slabPool;
@@ -1173,13 +1107,24 @@ wsbmSlabPoolInit(int fd,
     if (!slabPool->headers)
 	goto out_err1;
 
-    slabPool->devOffset = devOffset;
+    slabPool->basePool = basePool;
     slabPool->cache = cache;
-    slabPool->proposedPlacement = placement;
-    slabPool->validMask = validMask;
+    slabPool->attr = *attr;
     slabPool->numBuckets = numSizes;
     slabPool->pageSize = getpagesize();
-    slabPool->pageAlignment = pageAlignment;
+    if (attr->alignment != 0) {
+	if (attr->alignment < slabPool->pageSize) {
+	    if (slabPool->pageSize % attr->alignment != 0)
+		goto out_err1;
+	    slabPool->pageAlignment = 1;
+	} else {
+	    if (attr->alignment % slabPool->pageSize != 0)
+		goto out_err1;
+	    slabPool->pageAlignment = attr->alignment / slabPool->pageSize;
+	}
+    } else        
+	slabPool->pageAlignment = 0;
+
     slabPool->maxSlabSize = maxSlabSize;
     slabPool->desiredNumBuffers = desiredNumBuffers;
 
