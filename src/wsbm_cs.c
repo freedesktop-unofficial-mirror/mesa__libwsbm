@@ -44,7 +44,7 @@ wsbmBOStorage(struct _WsbmBufferObject *buf);
 
 struct _ValidateList
 {
-    const struct _WsbmDriver *driver;
+    const struct _WsbmVNodeDriver *driver;
     unsigned numTarget;
     unsigned numCurrent;
     unsigned numOnList;
@@ -184,7 +184,7 @@ wsbmPot(unsigned int val)
 
 static int
 validateCreateList(int numTarget, struct _ValidateList *list,
-		   const struct _WsbmDriver *driver)
+		   const struct _WsbmVNodeDriver *driver)
 {
     int i;
     unsigned int shift = wsbmPot(numTarget);
@@ -244,8 +244,8 @@ validateResetList(struct _ValidateList *list)
 
 struct _WsbmBufferList *
 wsbmBOCreateList(int target, int hasKernelBuffers,
-		 const struct _WsbmDriver *kernelDriver,
-		 const struct _WsbmDriver *userDriver)
+		 const struct _WsbmVNodeDriver *kernelDriver,
+		 const struct _WsbmVNodeDriver *userDriver)
 {
     struct _WsbmBufferList *list = calloc(sizeof(*list), 1);
     int ret;
@@ -317,11 +317,22 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
     }
 
     if (!cur) {
+	int ret;
+
 	cur = validateListAddNode(list, buf, hash, flags, mask);
 	if (!cur)
 	    return -ENOMEM;
+
+	ret = cur->driver->init(cur);
+	if (ret != 0) {
+	    WSBMLISTDEL(&cur->head);
+	    WSBMLISTDEL(&cur->hashHead);
+	    list->numOnList--;
+	    WSBMLISTADD(&cur->head, &list->free);
+	    return ret;
+	}
+
 	*newItem = 1;
-	cur->driver->clear(cur);
     } else {
 	uint64_t set_flags = flags & mask;
 	uint64_t clr_flags = (~flags) & mask;
@@ -342,9 +353,18 @@ wsbmAddValidateItem(struct _ValidateList *list, void *buf, uint64_t flags,
 	    return -EINVAL;
 	}
 
-	cur->set_flags |= set_flags;
-	cur->clr_flags |= clr_flags;
-	cur->set_flags &= ~(cur->clr_flags);
+	set_flags |= cur->set_flags;
+	clr_flags |= cur->clr_flags;
+	set_flags &= ~clr_flags;
+
+	if (cur->driver->reaccount && (set_flags != cur->set_flags)) {
+	    int ret = cur->driver->reaccount(cur, set_flags, clr_flags);
+	    if (ret)
+		return ret;
+	}
+
+	cur->set_flags = set_flags;
+	cur->clr_flags = clr_flags;
     }
     *itemLoc = cur->listItem;
     if (pnode)

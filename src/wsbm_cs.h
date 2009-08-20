@@ -38,10 +38,11 @@ struct _ValidateList;
 
 #define WSBM_PLACEMENT_MASK ((uint64_t) 0xFFFFFFFFULL)
 
-extern struct _WsbmBufferList *wsbmBOCreateList(int target,
-						int hasKernelBuffers,
-						const struct _WsbmDriver *kernelDriver,
-						const struct _WsbmDriver *userDriver);
+extern struct _WsbmBufferList *
+wsbmBOCreateList(int target,
+		 int hasKernelBuffers,
+		 const struct _WsbmVNodeDriver *kernelDriver,
+		 const struct _WsbmVNodeDriver *userDriver);
 
 extern int wsbmBOResetList(struct _WsbmBufferList *list);
 extern int wsbmBOAddListItem(struct _WsbmBufferList *list,

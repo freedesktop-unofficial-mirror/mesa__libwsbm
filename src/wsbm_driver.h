@@ -87,11 +87,14 @@ extern struct _WsbmThreadFuncs *wsbmCurThreadFunc;
 #define WSBM_COND_BROADCAST(_cond)		\
     (_cond)->func->condBroadcast(_cond);
 
-struct _WsbmDriver
+struct _WsbmVNodeDriver
 {
-    struct _ValidateNode *(*alloc) (const struct _WsbmDriver *);
+    int driver_id;
+    struct _ValidateNode *(*alloc) (const struct _WsbmVNodeDriver *);
     void (*free) (struct _ValidateNode *);
-    void (*clear) (struct _ValidateNode *);
+    int (*init) (struct _ValidateNode *);
+    int (*reaccount) (struct _ValidateNode *, uint64_t new_set_flags,
+		      uint64_t new_clr_flags);
 };
 
 extern struct _WsbmVNodeFuncs *wsbmCurVNodeFunc;
@@ -109,7 +112,7 @@ struct _ValidateNode
     uint64_t set_flags;
     uint64_t clr_flags;
     void *buf;
-    const struct _WsbmDriver *driver;
+    const struct _WsbmVNodeDriver *driver;
 };
 
 static inline struct _WsbmVNodeFuncs *
